@@ -42,15 +42,28 @@ def generate_report_pdf(original_pdf_path, output_pdf_path, data):
     
     # --- STEP 1: Berikan Highlight pada teks di PDF asli ---
     for page in doc:
+        # Pre-compute teks halaman yang sudah dibersihkan dari line-break
+        # untuk mempercepat pencarian O(1) di Python murni
+        page_text_clean = page.get_text().replace('\n', ' ').replace('\r', ' ').lower()
+        
         for item in data['plagiarized_sentences']:
             text = item['text']
             source_id = item['source_id']
             color = get_color_for_source(source_id)
+            words = text.split()
+            
+            # --- FAST FILTERING OPTIMIZATION ---
+            # Jangan lakukan pencarian PyMuPDF jika kalimat ini jelas-jelas tidak ada di halaman ini!
+            if len(words) >= 3:
+                chunk_first = " ".join(words[:3]).lower()
+                chunk_mid = " ".join(words[len(words)//2 : len(words)//2+3]).lower()
+                chunk_last = " ".join(words[-3:]).lower()
+                
+                # Jika awal, tengah, dan akhir tidak ada di teks halaman, pasti bukan di halaman ini
+                if chunk_first not in page_text_clean and chunk_mid not in page_text_clean and chunk_last not in page_text_clean:
+                    continue
             
             # --- ALGORITMA HIGHLIGHT ANTI LINE-BREAK ---
-            # Karena PyMuPDF gagal mencari kalimat panjang yang terpotong enter/baris baru,
-            # kita akali dengan mencari potongan 3 kata berurutan.
-            words = text.split()
             found_any = False
             first_rect = None
             
