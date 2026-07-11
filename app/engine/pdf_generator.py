@@ -47,31 +47,50 @@ def generate_report_pdf(original_pdf_path, output_pdf_path, data):
             source_id = item['source_id']
             color = get_color_for_source(source_id)
             
-            # Cari lokasi kalimat di halaman ini
-            # Coba cari seluruh kalimat
-            text_instances = page.search_for(text)
+            # --- ALGORITMA HIGHLIGHT ANTI LINE-BREAK ---
+            # Karena PyMuPDF gagal mencari kalimat panjang yang terpotong enter/baris baru,
+            # kita akali dengan mencari potongan 3 kata berurutan.
+            words = text.split()
+            found_any = False
+            first_rect = None
             
-            if not text_instances and len(text.split()) > 5:
-                words = text.split()
-                # Highlight per 5 kata
-                for i in range(0, len(words)-4, 5):
-                    chunk = " ".join(words[i:i+5])
-                    instances = page.search_for(chunk)
-                    for inst in instances:
-                        annot = page.add_highlight_annot(inst)
-                        annot.set_colors(stroke=color)
-                        annot.update()
-                        
-                        if i == 0 and instances.index(inst) == 0:
-                            draw_badge(page, inst, source_id, color)
-            else:
+            # Coba cari seluruh kalimat dulu (siapa tau berada di satu baris)
+            text_instances = page.search_for(text)
+            if text_instances:
                 for inst in text_instances:
                     annot = page.add_highlight_annot(inst)
                     annot.set_colors(stroke=color)
                     annot.update()
-                    
-                    if text_instances.index(inst) == 0:
-                        draw_badge(page, inst, source_id, color)
+                    if not first_rect:
+                        first_rect = inst
+                found_any = True
+                
+            # Jika gagal / kalimat terpotong, potong jadi pecahan 3 kata
+            if not found_any and len(words) >= 3:
+                for i in range(len(words) - 2):
+                    chunk = " ".join(words[i:i+3])
+                    insts = page.search_for(chunk)
+                    for inst in insts:
+                        annot = page.add_highlight_annot(inst)
+                        annot.set_colors(stroke=color)
+                        annot.update()
+                        if not first_rect:
+                            first_rect = inst
+                            
+            # Jika kalimat terlalu pendek (cuma 2 kata), cari 2 kata
+            elif not found_any and len(words) == 2:
+                chunk = " ".join(words)
+                insts = page.search_for(chunk)
+                for inst in insts:
+                    annot = page.add_highlight_annot(inst)
+                    annot.set_colors(stroke=color)
+                    annot.update()
+                    if not first_rect:
+                        first_rect = inst
+                        
+            # Gambar lencana superskrip Turnitin tepat di awal kalimat yg di-highlight
+            if first_rect:
+                draw_badge(page, first_rect, source_id, color)
 
     # --- STEP 2: Buat Halaman "ORIGINALITY REPORT" di akhir ---
     report_page = doc.new_page(-1, width=595, height=842) # Ukuran A4 standar
