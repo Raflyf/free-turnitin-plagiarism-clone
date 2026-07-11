@@ -40,35 +40,36 @@ def generate_report_pdf(original_pdf_path, output_pdf_path, data):
     """
     doc = fitz.open(original_pdf_path)
     
+    # --- DEDUPLIKASI FRASA SECARA GLOBAL ---
+    # Hindari mewarnai frasa yang sama berkali-kali jika muncul di kalimat berbeda
+    unique_phrases = {}
+    for item in data['plagiarized_sentences']:
+        txt = item['text']
+        if txt not in unique_phrases:
+            unique_phrases[txt] = item
+            
     # --- STEP 1: Berikan Highlight pada teks di PDF asli ---
     for page in doc:
-        # Pre-compute teks halaman yang sudah dibersihkan dari line-break
-        # untuk mempercepat pencarian O(1) di Python murni
         page_text_clean = page.get_text().replace('\n', ' ').replace('\r', ' ').lower()
         
-        for item in data['plagiarized_sentences']:
-            text = item['text']
+        for text, item in unique_phrases.items():
             source_id = item['source_id']
             color = get_color_for_source(source_id)
             words = text.split()
             
-            # --- FAST FILTERING OPTIMIZATION ---
-            # Jangan lakukan pencarian PyMuPDF jika kalimat ini jelas-jelas tidak ada di halaman ini!
             if len(words) >= 3:
                 chunk_first = " ".join(words[:3]).lower()
                 chunk_mid = " ".join(words[len(words)//2 : len(words)//2+3]).lower()
                 chunk_last = " ".join(words[-3:]).lower()
                 
-                # Jika awal, tengah, dan akhir tidak ada di teks halaman, pasti bukan di halaman ini
                 if chunk_first not in page_text_clean and chunk_mid not in page_text_clean and chunk_last not in page_text_clean:
                     continue
             
-            # --- ALGORITMA HIGHLIGHT ANTI LINE-BREAK ---
             found_any = False
             first_rect = None
             
-            # Coba cari seluruh kalimat dulu (siapa tau berada di satu baris)
-            text_instances = page.search_for(text)
+            # Coba cari seluruh kalimat dengan quads (dukung line-breaks)
+            text_instances = page.search_for(text, quads=True)
             if text_instances:
                 for inst in text_instances:
                     annot = page.add_highlight_annot(inst)
@@ -76,35 +77,38 @@ def generate_report_pdf(original_pdf_path, output_pdf_path, data):
                     annot.set_opacity(0.3)
                     annot.update()
                     if not first_rect:
-                        first_rect = inst
+                        first_rect = inst.rect
                 found_any = True
                 
-            # Jika gagal / kalimat terpotong, potong jadi pecahan 3 kata
+            # Jika terpotong parah antar-halaman, gunakan non-overlapping stepping window!
             if not found_any and len(words) >= 3:
-                for i in range(len(words) - 2):
+                # Gunakan step=3 agar tidak ada kotak warna yang saling menindih
+                for i in range(0, len(words), 3):
                     chunk = " ".join(words[i:i+3])
-                    insts = page.search_for(chunk)
+                    # Jika sisa < 3 kata, ambil 3 kata terakhir untuk memastikan konteks pencarian spesifik
+                    if len(chunk.split()) < 3 and len(words) >= 3:
+                        chunk = " ".join(words[-3:])
+                        
+                    insts = page.search_for(chunk, quads=True)
                     for inst in insts:
                         annot = page.add_highlight_annot(inst)
                         annot.set_colors(stroke=color)
                         annot.set_opacity(0.3)
                         annot.update()
                         if not first_rect:
-                            first_rect = inst
+                            first_rect = inst.rect
                             
-            # Jika kalimat terlalu pendek (cuma 2 kata), cari 2 kata
             elif not found_any and len(words) == 2:
                 chunk = " ".join(words)
-                insts = page.search_for(chunk)
+                insts = page.search_for(chunk, quads=True)
                 for inst in insts:
                     annot = page.add_highlight_annot(inst)
                     annot.set_colors(stroke=color)
                     annot.set_opacity(0.3)
                     annot.update()
                     if not first_rect:
-                        first_rect = inst
+                        first_rect = inst.rect
                         
-            # Gambar lencana superskrip Turnitin tepat di awal kalimat yg di-highlight
             if first_rect:
                 draw_badge(page, first_rect, source_id, color)
 
