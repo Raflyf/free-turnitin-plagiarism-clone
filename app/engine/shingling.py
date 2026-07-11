@@ -33,6 +33,18 @@ def calculate_similarity(doc_text, corpus, exclude_small=False):
     doc_sentences = get_sentences(doc_text)
     plagiarized_sentences_data = []
 
+    # Gabungkan teks dari artikel yang berasal dari domain yang sama (Deduplikasi)
+    # Agar di laporan PDF tidak muncul banyak "medium.com" secara berulang
+    domain_corpus = {}
+    for url, source_text in corpus.items():
+        base_domain = url.split('//')[-1].split('/')[0]
+        if base_domain not in domain_corpus:
+            domain_corpus[base_domain] = source_text
+        else:
+            domain_corpus[base_domain] += " " + source_text
+            
+    corpus = domain_corpus # Timpa corpus asli dengan corpus hasil gabungan domain
+
     for url, source_text in corpus.items():
         source_ngrams = set(get_ngrams(source_text, n=N_GRAM))
         overlap = doc_ngrams.intersection(source_ngrams)
