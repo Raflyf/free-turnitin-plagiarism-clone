@@ -73,6 +73,7 @@ def generate_report_pdf(original_pdf_path, output_pdf_path, data):
                 for inst in text_instances:
                     annot = page.add_highlight_annot(inst)
                     annot.set_colors(stroke=color)
+                    annot.set_opacity(0.3)
                     annot.update()
                     if not first_rect:
                         first_rect = inst
@@ -86,6 +87,7 @@ def generate_report_pdf(original_pdf_path, output_pdf_path, data):
                     for inst in insts:
                         annot = page.add_highlight_annot(inst)
                         annot.set_colors(stroke=color)
+                        annot.set_opacity(0.3)
                         annot.update()
                         if not first_rect:
                             first_rect = inst
@@ -97,6 +99,7 @@ def generate_report_pdf(original_pdf_path, output_pdf_path, data):
                 for inst in insts:
                     annot = page.add_highlight_annot(inst)
                     annot.set_colors(stroke=color)
+                    annot.set_opacity(0.3)
                     annot.update()
                     if not first_rect:
                         first_rect = inst
