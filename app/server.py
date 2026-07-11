@@ -1,5 +1,6 @@
 import os
 import time
+import math
 from flask import Flask, render_template, request, jsonify, send_file
 from werkzeug.utils import secure_filename
 import threading
@@ -21,7 +22,7 @@ os.makedirs(app.config['REPORT_FOLDER'], exist_ok=True)
 # Store results in memory
 results_db = {}
 
-def process_document(file_id, filepath, exclude_quotes=True, exclude_biblio=True, exclude_small=False):
+def process_document(file_id, filepath, original_filename, exclude_quotes=True, exclude_biblio=True, exclude_small=False):
     def set_progress(pct, msg):
         if file_id in results_db:
             results_db[file_id]['progress'] = pct
@@ -53,8 +54,8 @@ def process_document(file_id, filepath, exclude_quotes=True, exclude_biblio=True
         sorted_sources, total_similarity, plagiarized_sentences = calculate_similarity(doc_text, corpus, exclude_small)
         
         data = {
-            'filename': os.path.basename(filepath).replace('.pdf', ''),
-            'total_similarity': total_similarity,
+            'filename': original_filename.replace('.pdf', ''),
+            'total_similarity': int(math.floor(total_similarity)),
             'sources': sorted_sources,
             'plagiarized_sentences': plagiarized_sentences
         }
@@ -107,7 +108,7 @@ def upload_file():
             'progress': 0, 
             'message': 'Memulai proses...'
         }
-        thread = threading.Thread(target=process_document, args=(file_id, filepath, exclude_quotes, exclude_biblio, exclude_small), daemon=True)
+        thread = threading.Thread(target=process_document, args=(file_id, filepath, filename, exclude_quotes, exclude_biblio, exclude_small), daemon=True)
         thread.start()
         
         return jsonify({'file_id': file_id, 'filename': filename})
@@ -130,7 +131,11 @@ def report(file_id):
 def download_report(file_id):
     report_pdf_path = os.path.join(app.config['REPORT_FOLDER'], f"{file_id}_report.pdf")
     if os.path.exists(report_pdf_path):
-        return send_file(report_pdf_path, as_attachment=True, download_name=f"{file_id}_Turnitin_Report.pdf")
+        download_name = f"{file_id}_turnitin.pdf"
+        if file_id in results_db and 'data' in results_db[file_id]:
+            original = results_db[file_id]['data'].get('filename', file_id)
+            download_name = f"{original}_turnitin.pdf"
+        return send_file(report_pdf_path, as_attachment=True, download_name=download_name)
     return "PDF Report not found", 404
 
 if __name__ == '__main__':
