@@ -13,8 +13,12 @@ def extract_text_from_pdf(filepath, exclude_quotes=True, exclude_biblio=True):
     return clean_text(text, exclude_quotes, exclude_biblio)
 
 def clean_text(text, exclude_quotes=True, exclude_biblio=True):
+    # Bersihkan spasi dan enter (newline) DULU!
+    # PyMuPDF sering membaca teks sebagai "DAFTAR\nPUSTAKA" atau "DAFTAR  PUSTAKA"
+    text = re.sub(r'\s+', ' ', text).strip()
+    
     if exclude_biblio:
-        # Gunakan pencarian dari belakang (rfind) untuk mencari bab Daftar Pustaka sebenarnya (bukan di Daftar Isi)
+        # Gunakan pencarian dari belakang (rfind) untuk mencari bab Daftar Pustaka sebenarnya
         last_idx = max(text.upper().rfind('DAFTAR PUSTAKA'), text.upper().rfind('REFERENCES'))
         
         # Pastikan ia berada di paruh akhir dokumen untuk menghindari false positive di Daftar Isi
@@ -25,8 +29,6 @@ def clean_text(text, exclude_quotes=True, exclude_biblio=True):
         # Hilangkan kutipan langsung ("...")
         text = re.sub(r'".*?"', '', text)
     
-    # Bersihkan spasi berlebih
-    text = re.sub(r'\s+', ' ', text).strip()
     return text
 
 def get_sentences(text):
