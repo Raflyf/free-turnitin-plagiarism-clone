@@ -1,3 +1,5 @@
+import re
+
 def get_ngrams(text, n=5):
     """Membagi teks menjadi N-Grams (Shingling) persis seperti algoritma Turnitin"""
     import re
