@@ -15,8 +15,8 @@ def get_sentences(text):
 
 def calculate_similarity(doc_text, corpus, exclude_small=False):
     """Membandingkan seluruh dokumen dengan database web sementara (Scraped Corpus)"""
-    # Konsep "N-Gram 3.5" (Rata-rata dari N-Gram 3 dan N-Gram 4)
-    # Ini memberikan titik tengah sempurna antara 13% dan 3%.
+    # Konsep "N-Gram 3.6" (Weighted Average: 40% dari N-Gram 3 dan 60% dari N-Gram 4)
+    # Bobot: (3 * 0.4) + (4 * 0.6) = 1.2 + 2.4 = 3.6
     N_GRAM = 3
     doc_ngrams_3 = set(get_ngrams(doc_text, n=3))
     doc_ngrams_4 = set(get_ngrams(doc_text, n=4))
@@ -60,8 +60,8 @@ def calculate_similarity(doc_text, corpus, exclude_small=False):
             pct_3 = (len(overlap_3) / total_ngrams_3) * 100 if total_ngrams_3 else 0
             pct_4 = (len(overlap_4) / total_ngrams_4) * 100 if total_ngrams_4 else 0
             
-            # "N-Gram 3.5" adalah rata-rata matematis dari 3 dan 4
-            match_percentage = (pct_3 + pct_4) / 2
+            # "N-Gram 3.6" menggunakan pembobotan 40% (3) dan 60% (4)
+            match_percentage = (pct_3 * 0.4) + (pct_4 * 0.6)
             
             if exclude_small and match_percentage < 1.0:
                 continue
@@ -82,7 +82,7 @@ def calculate_similarity(doc_text, corpus, exclude_small=False):
             words_4 = len(overlap_4) * 4
             sources_report[url] = {
                 'percentage': match_percentage,
-                'matched_words': int((words_3 + words_4) / 2),
+                'matched_words': int((words_3 * 0.4) + (words_4 * 0.6)),
                 'url': url,
                 'sort_score': match_percentage * priority
             }
@@ -90,7 +90,7 @@ def calculate_similarity(doc_text, corpus, exclude_small=False):
     # Hitung total kemiripan keseluruhan (tanpa duplikasi antar sumber)
     total_sim_3 = (len(matched_ngrams_global_3) / total_ngrams_3) * 100 if total_ngrams_3 else 0
     total_sim_4 = (len(matched_ngrams_global_4) / total_ngrams_4) * 100 if total_ngrams_4 else 0
-    total_similarity = (total_sim_3 + total_sim_4) / 2
+    total_similarity = (total_sim_3 * 0.4) + (total_sim_4 * 0.6)
     
     # Batasi maksimal 100%
     if total_similarity > 100:
