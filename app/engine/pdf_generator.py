@@ -57,7 +57,8 @@ def generate_report_pdf(original_pdf_path, output_pdf_path, data):
         
         def is_overlapping(rect):
             for r in highlighted_rects:
-                if (rect & r).get_area() > 0.3 * rect.get_area():
+                # Jika ada tumpang tindih sekecil 5% saja, blokir!
+                if (rect & r).get_area() > 0.05 * rect.get_area():
                     return True
             return False
         
@@ -82,6 +83,7 @@ def generate_report_pdf(original_pdf_path, output_pdf_path, data):
             if text_instances:
                 for inst in text_instances:
                     if is_overlapping(inst.rect):
+                        print(f"[Anti-Overlap] Memblokir penumpukan warna pada frasa: {text[:30]}...")
                         continue
                     highlighted_rects.append(inst.rect)
                     
@@ -106,6 +108,7 @@ def generate_report_pdf(original_pdf_path, output_pdf_path, data):
                     insts = page.search_for(chunk, quads=True)
                     for inst in insts:
                         if is_overlapping(inst.rect):
+                            print(f"[Anti-Overlap] Memblokir penumpukan warna pada potongan: {chunk[:30]}...")
                             continue
                         highlighted_rects.append(inst.rect)
                         
@@ -121,6 +124,7 @@ def generate_report_pdf(original_pdf_path, output_pdf_path, data):
                 insts = page.search_for(chunk, quads=True)
                 for inst in insts:
                     if is_overlapping(inst.rect):
+                        print(f"[Anti-Overlap] Memblokir penumpukan warna pada 2-kata: {chunk[:30]}...")
                         continue
                     highlighted_rects.append(inst.rect)
                     
