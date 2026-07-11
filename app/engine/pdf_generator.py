@@ -52,6 +52,15 @@ def generate_report_pdf(original_pdf_path, output_pdf_path, data):
     for page in doc:
         page_text_clean = page.get_text().replace('\n', ' ').replace('\r', ' ').lower()
         
+        # Simpan semua kotak warna di halaman ini untuk mencegah overlap
+        highlighted_rects = []
+        
+        def is_overlapping(rect):
+            for r in highlighted_rects:
+                if (rect & r).get_area() > 0.3 * rect.get_area():
+                    return True
+            return False
+        
         for text, item in unique_phrases.items():
             source_id = item['source_id']
             color = get_color_for_source(source_id)
@@ -72,13 +81,18 @@ def generate_report_pdf(original_pdf_path, output_pdf_path, data):
             text_instances = page.search_for(text, quads=True)
             if text_instances:
                 for inst in text_instances:
+                    if is_overlapping(inst.rect):
+                        continue
+                    highlighted_rects.append(inst.rect)
+                    
                     annot = page.add_highlight_annot(inst)
                     annot.set_colors(stroke=color)
                     annot.set_opacity(0.3)
                     annot.update()
                     if not first_rect:
                         first_rect = inst.rect
-                found_any = True
+                if first_rect:
+                    found_any = True
                 
             # Jika terpotong parah antar-halaman, gunakan non-overlapping stepping window!
             if not found_any and len(words) >= 3:
@@ -91,6 +105,10 @@ def generate_report_pdf(original_pdf_path, output_pdf_path, data):
                         
                     insts = page.search_for(chunk, quads=True)
                     for inst in insts:
+                        if is_overlapping(inst.rect):
+                            continue
+                        highlighted_rects.append(inst.rect)
+                        
                         annot = page.add_highlight_annot(inst)
                         annot.set_colors(stroke=color)
                         annot.set_opacity(0.3)
@@ -102,6 +120,10 @@ def generate_report_pdf(original_pdf_path, output_pdf_path, data):
                 chunk = " ".join(words)
                 insts = page.search_for(chunk, quads=True)
                 for inst in insts:
+                    if is_overlapping(inst.rect):
+                        continue
+                    highlighted_rects.append(inst.rect)
+                    
                     annot = page.add_highlight_annot(inst)
                     annot.set_colors(stroke=color)
                     annot.set_opacity(0.3)
