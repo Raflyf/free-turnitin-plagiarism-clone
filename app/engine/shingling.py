@@ -13,8 +13,9 @@ def get_sentences(text):
 
 def calculate_similarity(doc_text, corpus, exclude_small=False):
     """Membandingkan seluruh dokumen dengan database web sementara (Scraped Corpus)"""
-    # Menggunakan 3-Gram (Trigram) untuk mendeteksi frasa umum (sangat sensitif)
-    N_GRAM = 3
+    # Panjang frasa (N-Gram). 4 kata adalah sweet spot Turnitin 
+    # untuk membuang frasa umum (seperti "berdasarkan hasil penelitian di atas")
+    N_GRAM = 4
     doc_ngrams = set(get_ngrams(doc_text, n=N_GRAM))
     
     if not doc_ngrams:
