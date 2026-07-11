@@ -48,10 +48,25 @@ def generate_report_pdf(original_pdf_path, output_pdf_path, data):
         if txt not in unique_phrases:
             unique_phrases[txt] = item
             
+    import re
     # --- STEP 1: Berikan Highlight pada teks di PDF asli ---
-    for page in doc:
-        page_text_clean = page.get_text().replace('\n', ' ').replace('\r', ' ').lower()
+    biblio_started = False
+    
+    for page_num in range(len(doc)):
+        page = doc[page_num]
         
+        # Baca teks halaman dan bersihkan spasinya untuk deteksi Daftar Pustaka
+        page_text_clean = page.get_text().replace('\n', ' ').replace('\r', ' ').lower()
+        page_text_nospace = re.sub(r'\s+', ' ', page_text_clean).strip()
+        
+        # Jika halaman berada di paruh akhir dokumen dan mengandung "daftar pustaka", hentikan highlight
+        if page_num >= len(doc) * 0.5:
+            if "daftar pustaka" in page_text_nospace or "references" in page_text_nospace:
+                biblio_started = True
+                
+        if biblio_started:
+            continue
+            
         # Simpan semua kotak warna di halaman ini untuk mencegah overlap
         highlighted_rects = []
         
