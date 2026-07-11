@@ -228,15 +228,6 @@
             </div>
         </div>
         
-        <div class="filter-section" style="margin-top: 20px;">
-            <div class="section-title">2. Tingkat Sensitivitas (N-Gram)</div>
-            <select id="ngramSelect" style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #d1d5db; font-family: 'Roboto', sans-serif; font-size: 14px; margin-top: 10px; background-color: white; color: #374151;">
-                <option value="3">N-Gram 3 (Sangat Sensitif - Menangkap plagiasi yg diedit)</option>
-                <option value="4">N-Gram 4 (Standar - Keseimbangan menengah)</option>
-                <option value="5">N-Gram 5 (Kaku - Mirip Turnitin, butuh kemiripan persis 5 kata berurutan)</option>
-            </select>
-        </div>
-        
         <div class="submit-container">
             <button class="btn-submit" id="submitBtn" onclick="uploadFile()">
                 SUBMIT
@@ -327,7 +318,6 @@
         formData.append('exclude_quotes', document.getElementById('chkKutipan').checked);
         formData.append('exclude_biblio', document.getElementById('chkPustaka').checked);
         formData.append('exclude_small', document.getElementById('chkKecil').checked);
-        formData.append('ngram_size', document.getElementById('ngramSelect').value);
 
         document.getElementById('loadingOverlay').style.display = 'flex';
         document.getElementById('progressContainer').style.display = 'block';

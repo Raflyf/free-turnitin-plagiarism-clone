@@ -22,7 +22,7 @@ os.makedirs(app.config['REPORT_FOLDER'], exist_ok=True)
 # Store results in memory
 results_db = {}
 
-def process_document(file_id, filepath, original_filename, exclude_quotes=True, exclude_biblio=True, exclude_small=False, ngram_size=3):
+def process_document(file_id, filepath, original_filename, exclude_quotes=True, exclude_biblio=True, exclude_small=False):
     def set_progress(pct, msg):
         if file_id in results_db:
             results_db[file_id]['progress'] = pct
@@ -50,8 +50,8 @@ def process_document(file_id, filepath, original_filename, exclude_quotes=True, 
         corpus = scrape_all_candidates(urls, progress_cb=scrape_progress)
         
         set_progress(85, "Menghitung kemiripan (Algoritma N-Gram)...")
-        print(f"[!] Menghitung similaritas dengan algoritma {ngram_size}-Gram Shingling...")
-        sorted_sources, total_similarity, plagiarized_sentences = calculate_similarity(doc_text, corpus, exclude_small, ngram_size)
+        print("[!] Menghitung similaritas dengan algoritma N-Gram Shingling...")
+        sorted_sources, total_similarity, plagiarized_sentences = calculate_similarity(doc_text, corpus, exclude_small)
         
         data = {
             'filename': original_filename.replace('.pdf', ''),
@@ -93,7 +93,6 @@ def upload_file():
     exclude_quotes = request.form.get('exclude_quotes') == 'true'
     exclude_biblio = request.form.get('exclude_biblio') == 'true'
     exclude_small = request.form.get('exclude_small') == 'true'
-    ngram_size = int(request.form.get('ngram_size', 3))
 
     if file.filename == '':
         return jsonify({'error': 'No selected file'}), 400
@@ -109,7 +108,7 @@ def upload_file():
             'progress': 0, 
             'message': 'Memulai proses...'
         }
-        thread = threading.Thread(target=process_document, args=(file_id, filepath, filename, exclude_quotes, exclude_biblio, exclude_small, ngram_size), daemon=True)
+        thread = threading.Thread(target=process_document, args=(file_id, filepath, filename, exclude_quotes, exclude_biblio, exclude_small), daemon=True)
         thread.start()
         
         return jsonify({'file_id': file_id, 'filename': filename})
