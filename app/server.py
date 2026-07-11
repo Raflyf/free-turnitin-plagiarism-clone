@@ -9,8 +9,10 @@ from engine.shingling import calculate_similarity
 from engine.pdf_generator import generate_report_pdf
 
 app = Flask(__name__)
-app.config['UPLOAD_FOLDER'] = 'uploads'
-app.config['REPORT_FOLDER'] = 'reports'
+# Gunakan absolute path agar direktori selalu berada di dalam folder app/ 
+base_dir = os.path.dirname(os.path.abspath(__file__))
+app.config['UPLOAD_FOLDER'] = os.path.join(base_dir, 'uploads')
+app.config['REPORT_FOLDER'] = os.path.join(base_dir, 'reports')
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024 # 16MB max
 
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
@@ -82,7 +84,7 @@ def upload_file():
         file.save(filepath)
         
         results_db[file_id] = {'status': 'processing'}
-        thread = threading.Thread(target=process_document, args=(file_id, filepath, exclude_quotes, exclude_biblio, exclude_small))
+        thread = threading.Thread(target=process_document, args=(file_id, filepath, exclude_quotes, exclude_biblio, exclude_small), daemon=True)
         thread.start()
         
         return jsonify({'file_id': file_id, 'filename': filename})
@@ -109,4 +111,46 @@ def download_report(file_id):
     return "PDF Report not found", 404
 
 if __name__ == '__main__':
-    app.run(port=5001, debug=True)
+    import socket
+    import signal
+    
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        local_ip = s.getsockname()[0]
+        s.close()
+    except:
+        local_ip = "127.0.0.1"
+    
+    def on_ctrl_c(sig, frame):
+        print("\n[!] Mematikan server dan ngrok...")
+        try:
+            from pyngrok import ngrok
+            ngrok.kill()
+        except:
+            pass
+        os._exit(0)
+    
+    signal.signal(signal.SIGINT, on_ctrl_c)
+    
+    print("\n==================================================")
+    print(f"[!] Akses Lokal (IP)   : http://{local_ip}:5001")
+    
+    # Jalankan Ngrok di thread terpisah agar crash-nya tidak mematikan Flask
+    def start_ngrok():
+        try:
+            from pyngrok import ngrok
+            import logging
+            # Sembunyikan pesan warning ngrok agar tidak memenuhi terminal
+            logging.getLogger("pyngrok").setLevel(logging.CRITICAL)
+            ngrok.kill()
+            public_url = ngrok.connect(5001)
+            print(f"[!] Akses Publik Ngrok : {public_url.public_url}")
+        except Exception as e:
+            print(f"[!] Ngrok tidak tersedia: {e}")
+    
+    ngrok_thread = threading.Thread(target=start_ngrok, daemon=True)
+    ngrok_thread.start()
+    print("==================================================\n")
+    
+    app.run(host='0.0.0.0', port=5001, debug=True, use_reloader=False)
