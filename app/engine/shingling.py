@@ -15,9 +15,9 @@ def get_sentences(text):
 
 def calculate_similarity(doc_text, corpus, exclude_small=False):
     """Membandingkan seluruh dokumen dengan database web sementara (Scraped Corpus)"""
-    # Kembalikan ke 3-Gram agar hasil kemiripan persentase kembali menyentuh ~18% (target Turnitin asli).
-    # Catatan: Karena N-Gram kecil (3), frasa pasaran mungkin akan tersorot, tetapi visual PDF sudah dijamin aman (tidak tumpang tindih dan daftar pustaka bersih).
-    N_GRAM = 3
+    # Ubah ke 4-Gram untuk mencari titik tengah antara sensitivitas (N-Gram 3: 13%) dan presisi (N-Gram 5: 2%).
+    # Target: ~8% sesuai dengan Turnitin asli.
+    N_GRAM = 4
     doc_ngrams = set(get_ngrams(doc_text, n=N_GRAM))
     
     if not doc_ngrams:
