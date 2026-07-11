@@ -13,9 +13,9 @@ def get_sentences(text):
 
 def calculate_similarity(doc_text, corpus, exclude_small=False):
     """Membandingkan seluruh dokumen dengan database web sementara (Scraped Corpus)"""
-    # Kembalikan ke 3-Gram. Terbukti ini adalah pengaturan yang paling akurat 
-    # untuk bahasa Indonesia agar hasilnya kembali menyentuh ~20% (mendekati 18%)
-    N_GRAM = 3
+    # Kembalikan ke 5-Gram (Standar Turnitin) agar hasil kemiripan benar-benar akurat
+    # dan hanya memotong frasa yang persis berurutan minimal 5 kata.
+    N_GRAM = 5
     doc_ngrams = set(get_ngrams(doc_text, n=N_GRAM))
     
     if not doc_ngrams:
@@ -68,8 +68,7 @@ def calculate_similarity(doc_text, corpus, exclude_small=False):
     # Mencari kalimat yang plagiat untuk ditampilkan
     # Memerlukan ID sumber agar bisa diwarnai sesuai dengan ranking
     
-    # PRECOMPUTE: Hitung N-Gram sumber SEKALI SAJA di awal (bukan di setiap loop kalimat)
-    # Batasi ke top-20 sumber terbesar untuk kecepatan maksimal
+    # PRECOMPUTE: Hitung N-Gram sumber SEKALI SAJA di awal
     top_sources = sorted_sources[:20]
     source_ngrams_cache = {}
     for idx, source in enumerate(top_sources):
@@ -78,27 +77,51 @@ def calculate_similarity(doc_text, corpus, exclude_small=False):
             source_ngrams_cache[idx] = set(get_ngrams(corpus[url], n=N_GRAM))
     
     for sentence in doc_sentences:
-        s_ngrams = set(get_ngrams(sentence, n=N_GRAM))
-        if not s_ngrams:
-            continue
-            
-        # Hitung rasio irisan N-Gram kalimat ini terhadap total N-Gram plagiat global
-        overlap_with_global = s_ngrams.intersection(matched_ngrams_global)
+        s_words = sentence.split() # Pertahankan tanda baca asli untuk PDF
+        clean_words = [re.sub(r'[^\w\s]', '', w).lower() for w in s_words]
         
-        # Jika minimal 30% dari N-Gram di kalimat ini terdeteksi plagiat
-        if len(overlap_with_global) / len(s_ngrams) > 0.3:
-            # Cari sumber mana yang paling banyak beririsan dengan kalimat ini
+        is_matched = [False] * len(s_words)
+        
+        # Tandai kata mana saja yang masuk dalam 5-Gram plagiat
+        for i in range(len(s_words) - N_GRAM + 1):
+            ngram = " ".join(clean_words[i:i+N_GRAM])
+            if ngram in matched_ngrams_global:
+                for j in range(i, i+N_GRAM):
+                    is_matched[j] = True
+                    
+        # Kumpulkan potongan frasa (potongan berurutan yang bernilai True)
+        phrases = []
+        current_phrase = []
+        for i in range(len(s_words)):
+            if is_matched[i]:
+                current_phrase.append(s_words[i])
+            else:
+                if current_phrase:
+                    phrases.append(" ".join(current_phrase))
+                    current_phrase = []
+        if current_phrase:
+            phrases.append(" ".join(current_phrase))
+            
+        # Simpan setiap potongan frasa ke daftar highlight
+        for phrase in phrases:
+            # Gunakan N-Gram dari potongan frasa ini untuk mencari sumber terkuatnya
+            p_ngrams = set(get_ngrams(phrase, n=N_GRAM))
             best_source_id = -1
             best_overlap = 0
+            
             for idx, cached_ngrams in source_ngrams_cache.items():
-                overlap_len = len(s_ngrams.intersection(cached_ngrams))
+                overlap_len = len(p_ngrams.intersection(cached_ngrams))
                 if overlap_len > best_overlap:
                     best_overlap = overlap_len
-                    best_source_id = idx + 1 # 1-indexed for Turnitin colors
-            
+                    best_source_id = idx + 1
+                    
+            # Jika tidak ada yang cocok (biasanya karena panjang kata < N_GRAM), kita pakai fallback source 1
+            if best_source_id == -1 and len(source_ngrams_cache) > 0:
+                best_source_id = 1
+                
             if best_source_id != -1:
                 plagiarized_sentences_data.append({
-                    'text': sentence,
+                    'text': phrase,
                     'source_id': best_source_id
                 })
 
