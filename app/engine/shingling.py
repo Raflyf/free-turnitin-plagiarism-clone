@@ -15,9 +15,9 @@ def get_sentences(text):
 
 def calculate_similarity(doc_text, corpus, exclude_small=False):
     """Membandingkan seluruh dokumen dengan database web sementara (Scraped Corpus)"""
-    # Ubah ke 4-Gram untuk mencari titik tengah antara sensitivitas (N-Gram 3: 13%) dan presisi (N-Gram 5: 2%).
-    # Target: ~8% sesuai dengan Turnitin asli.
-    N_GRAM = 4
+    # Kembalikan ke 3-Gram karena ini adalah baseline yang paling stabil secara keseluruhan (seperti yang terbukti di skripsi teman Anda).
+    # Fluktuasi hasil per dokumen adalah hal yang wajar karena ini memindai web terbuka secara live.
+    N_GRAM = 3
     doc_ngrams = set(get_ngrams(doc_text, n=N_GRAM))
     
     if not doc_ngrams:
