@@ -323,11 +323,11 @@
         document.getElementById('progressContainer').style.display = 'block';
         document.getElementById('progressTextContainer').style.display = 'flex';
         
-        let timerSeconds = 0;
-        document.getElementById('timerText').innerText = timerSeconds + " detik";
+        let startTime = Date.now();
+        document.getElementById('timerText').innerText = "0 detik";
         timerInterval = setInterval(() => {
-            timerSeconds++;
-            document.getElementById('timerText').innerText = timerSeconds + " detik";
+            let elapsedSeconds = Math.floor((Date.now() - startTime) / 1000);
+            document.getElementById('timerText').innerText = elapsedSeconds + " detik";
         }, 1000);
 
         fetch('/upload', {
