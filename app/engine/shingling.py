@@ -15,20 +15,16 @@ def get_sentences(text):
 
 def calculate_similarity(doc_text, corpus, exclude_small=False):
     """Membandingkan seluruh dokumen dengan database web sementara (Scraped Corpus)"""
-    # Konsep "N-Gram 3.55" (Weighted Average: 45% dari N-Gram 3 dan 55% dari N-Gram 4)
-    # Bobot: (3 * 0.45) + (4 * 0.55) = 1.35 + 2.2 = 3.55
+    # Kembali ke N-Gram 3 Murni (Standar paling stabil)
     N_GRAM = 3
     doc_ngrams_3 = set(get_ngrams(doc_text, n=3))
-    doc_ngrams_4 = set(get_ngrams(doc_text, n=4))
     
     if not doc_ngrams_3:
         return {}, 0.0, []
 
     total_ngrams_3 = len(doc_ngrams_3)
-    total_ngrams_4 = len(doc_ngrams_4)
     
     matched_ngrams_global_3 = set()
-    matched_ngrams_global_4 = set()
     
     # Simpan report per URL
     sources_report = {}
@@ -51,24 +47,17 @@ def calculate_similarity(doc_text, corpus, exclude_small=False):
 
     for url, source_text in corpus.items():
         source_ngrams_3 = set(get_ngrams(source_text, n=3))
-        source_ngrams_4 = set(get_ngrams(source_text, n=4))
         
         overlap_3 = doc_ngrams_3.intersection(source_ngrams_3)
-        overlap_4 = doc_ngrams_4.intersection(source_ngrams_4)
         
-        if overlap_3 or overlap_4:
-            pct_3 = (len(overlap_3) / total_ngrams_3) * 100 if total_ngrams_3 else 0
-            pct_4 = (len(overlap_4) / total_ngrams_4) * 100 if total_ngrams_4 else 0
-            
-            # "N-Gram 3.55" menggunakan pembobotan 45% (3) dan 55% (4)
-            match_percentage = (pct_3 * 0.45) + (pct_4 * 0.55)
+        if overlap_3:
+            match_percentage = (len(overlap_3) / total_ngrams_3) * 100 if total_ngrams_3 else 0
             
             if exclude_small and match_percentage < 1.0:
                 continue
             
             # Jika lolos filter, baru ditambahkan ke global pool
             matched_ngrams_global_3.update(overlap_3)
-            matched_ngrams_global_4.update(overlap_4)
             
             # Berikan prioritas (Priority Multiplier) untuk situs akademik/jurnal/repositori
             priority = 1.0
@@ -82,15 +71,13 @@ def calculate_similarity(doc_text, corpus, exclude_small=False):
             words_4 = len(overlap_4) * 4
             sources_report[url] = {
                 'percentage': match_percentage,
-                'matched_words': int((words_3 * 0.45) + (words_4 * 0.55)),
+                'matched_words': len(overlap_3) * 3,
                 'url': url,
                 'sort_score': match_percentage * priority
             }
 
     # Hitung total kemiripan keseluruhan (tanpa duplikasi antar sumber)
-    total_sim_3 = (len(matched_ngrams_global_3) / total_ngrams_3) * 100 if total_ngrams_3 else 0
-    total_sim_4 = (len(matched_ngrams_global_4) / total_ngrams_4) * 100 if total_ngrams_4 else 0
-    total_similarity = (total_sim_3 * 0.45) + (total_sim_4 * 0.55)
+    total_similarity = (len(matched_ngrams_global_3) / total_ngrams_3) * 100 if total_ngrams_3 else 0
     
     # Batasi maksimal 100%
     if total_similarity > 100:
