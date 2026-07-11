@@ -248,7 +248,7 @@
     
     <div style="display: flex; justify-content: space-between; width: 80%; max-width: 400px; margin-top: 8px; display: none;" id="progressTextContainer">
         <span id="progressText" style="color: #666; font-size: 13px; font-weight: bold;">0%</span>
-        <span id="timerText" style="color: #ef4444; font-size: 13px; font-weight: bold;">0 detik</span>
+        <span id="timerText" style="color: #ef4444; font-size: 13px; font-weight: bold;">00:00</span>
     </div>
 </div>
 
@@ -324,10 +324,15 @@
         document.getElementById('progressTextContainer').style.display = 'flex';
         
         let startTime = Date.now();
-        document.getElementById('timerText').innerText = "0 detik";
+        document.getElementById('timerText').innerText = "00:00";
         timerInterval = setInterval(() => {
             let elapsedSeconds = Math.floor((Date.now() - startTime) / 1000);
-            document.getElementById('timerText').innerText = elapsedSeconds + " detik";
+            let minutes = Math.floor(elapsedSeconds / 60);
+            let seconds = elapsedSeconds % 60;
+            let formattedTime = 
+                (minutes < 10 ? "0" + minutes : minutes) + ":" + 
+                (seconds < 10 ? "0" + seconds : seconds);
+            document.getElementById('timerText').innerText = formattedTime;
         }, 1000);
 
         fetch('/upload', {
