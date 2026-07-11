@@ -5,27 +5,35 @@ from bs4 import BeautifulSoup
 from concurrent.futures import ThreadPoolExecutor
 from ddgs import DDGS
 
-def get_candidate_urls(sentences, max_probes=15):
+def fetch_probe(probe):
+    """Mencari satu probe ke DuckDuckGo"""
+    urls_found = []
+    try:
+        ddgs = DDGS()
+        short_probe = " ".join(probe.split()[:15])
+        results = ddgs.text(f'{short_probe}', max_results=8)
+        for res in list(results):
+            if 'href' in res and not res['href'].endswith('.pdf'): 
+                urls_found.append(res['href'])
+        # Jeda lebih singkat karena sudah disebar ke beberapa thread
+        time.sleep(random.uniform(0.5, 1.5))
+    except Exception as e:
+        pass
+    return urls_found
+
+def get_candidate_urls(sentences, max_probes=120):
     """Mencari kandidat URL jurnal/referensi menggunakan sampel kalimat"""
-    ddgs = DDGS()
     probes = random.sample(sentences, min(len(sentences), max_probes))
     urls = set()
     
-    print(f"Mencari kandidat URL dari {len(probes)} sampel kalimat (Multi-Threading)...")
+    print(f"Mencari kandidat URL dari {len(probes)} sampel kalimat (Multi-Threading Cepat)...")
     
-    for i, probe in enumerate(probes):
-        try:
-            # Batasi panjang probe maksimal 15 kata agar mesin pencari tidak error/menolak kueri
-            short_probe = " ".join(probe.split()[:15])
-            
-            # Cari kalimat di web tanpa tanda kutip agar DDG mengembalikan hasil terkait
-            results = ddgs.text(f'{short_probe}', max_results=8)
-            for res in list(results):
-                if 'href' in res and not res['href'].endswith('.pdf'): 
-                    urls.add(res['href'])
-            time.sleep(random.uniform(1.5, 3)) # Hindari blokir DDG
-        except Exception as e:
-            continue
+    # Gunakan 8 pekerja paralel untuk mencari di mesin pencari.
+    # Waktu akan terpangkas drastis dari ~5 menit menjadi kurang dari 1 menit
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        results = executor.map(fetch_probe, probes)
+        for res_urls in results:
+            urls.update(res_urls)
             
     print(f"Berhasil mengumpulkan {len(urls)} kandidat URL.")
     return list(urls)
