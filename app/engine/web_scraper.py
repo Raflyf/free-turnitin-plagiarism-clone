@@ -86,7 +86,7 @@ def fetch_ddgs(probe):
         normal_urls = []
         
         for res in list(results):
-            if 'href' in res and not res['href'].endswith('.pdf'):
+            if 'href' in res:
                 url = res['href'].lower()
                 # Deteksi domain prioritas tinggi ala Turnitin (berdasarkan referensi PDF Asli)
                 priority_keywords = [
@@ -166,7 +166,7 @@ def get_candidate_urls(sentences, max_probes=100, progress_cb=None):
     return list(urls), preloaded_corpus
 
 def scrape_url(url):
-    """Bot Crawler untuk meniru TurnitinBot"""
+    """Bot Crawler untuk meniru TurnitinBot (Mendukung HTML dan PDF)"""
     try:
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36',
@@ -174,18 +174,31 @@ def scrape_url(url):
             'Accept-Language': 'en-US,en;q=0.5',
             'Connection': 'keep-alive'
         }
-        res = requests.get(url, headers=headers, timeout=8, verify=False) # Abaikan SSL error untuk blogspot lama
+        res = requests.get(url, headers=headers, timeout=12, verify=False) # Naikkan timeout untuk PDF
         if res.status_code == 200:
-            soup = BeautifulSoup(res.text, 'html.parser')
-            # Hapus tag yang tidak berisi konten ilmiah
-            for script in soup(["script", "style", "nav", "footer", "header", "aside", "menu"]):
-                script.decompose()
-            
-            # Ekstrak seluruh teks yang tersisa dengan spasi sebagai pemisah
-            text = soup.get_text(separator=' ')
             import re
-            text = re.sub(r'\s+', ' ', text).strip()
-            return url, text
+            
+            # Deteksi jika file adalah PDF (Banyak repositori kampus langsung mengembalikan file PDF)
+            if 'application/pdf' in res.headers.get('Content-Type', '').lower() or url.lower().endswith('.pdf'):
+                import fitz
+                import io
+                doc = fitz.open(stream=res.content, filetype="pdf")
+                text = ""
+                for page in doc:
+                    text += page.get_text() + " "
+                text = re.sub(r'\s+', ' ', text).strip()
+                return url, text
+            else:
+                # Parsing HTML biasa
+                soup = BeautifulSoup(res.text, 'html.parser')
+                # Hapus tag yang tidak berisi konten ilmiah
+                for script in soup(["script", "style", "nav", "footer", "header", "aside", "menu"]):
+                    script.decompose()
+                
+                # Ekstrak seluruh teks yang tersisa dengan spasi sebagai pemisah
+                text = soup.get_text(separator=' ')
+                text = re.sub(r'\s+', ' ', text).strip()
+                return url, text
     except:
         pass
     return url, ""
