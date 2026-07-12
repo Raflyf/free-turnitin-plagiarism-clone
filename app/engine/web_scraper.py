@@ -310,7 +310,8 @@ def get_candidate_urls(sentences, max_probes=100, progress_cb=None):
     urls = set()
     preloaded_corpus = {}
     
-    print(f"[API] Meluncurkan Bot AI & Browser Crawler untuk 50 Fingerprints...")
+    print(f"[API] Meluncurkan Bot AI & Browser Crawler untuk {len(probes)} Fingerprints...")
+    
     try:
         def fetch_pplx(args):
             idx, probe = args
