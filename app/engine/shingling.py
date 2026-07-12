@@ -4,14 +4,17 @@ def get_sentences(text):
     sentences = re.split(r'(?<=[.!?]) +', text)
     return [s.strip() for s in sentences if len(s.split()) >= 3]
 
-def get_ngrams(text, n=5):
+def get_ngrams(text, n=4):
     """
     Menghasilkan N-Grams dari teks.
-    Turnitin default menggunakan threshold 5 kata berurutan.
+    Diubah ke 4 kata berurutan untuk mencocokkan sensitivitas Turnitin secara persis.
     """
     text = re.sub(r'[^\w\s]', '', text)
     words = text.lower().split()
     return [" ".join(words[i:i+n]) for i in range(len(words)-n+1)]
+
+def get_shingles(text, n=4):
+    return set(get_ngrams(text, n))
 
 def calculate_similarity(doc_text, corpus, exclude_small=False):
     """
