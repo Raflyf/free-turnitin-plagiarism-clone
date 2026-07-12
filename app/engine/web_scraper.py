@@ -98,6 +98,68 @@ def fetch_openalex(probe):
         pass
     return urls_found, texts_found
 
+def fetch_google_scholar(probe):
+    """Mencari repositori jurnal dari Google Scholar via ScrapingBee Proxy (Bypass CAPTCHA)"""
+    urls_found = []
+    try:
+        import urllib.parse
+        short_probe = " ".join(probe.split()[:15])
+        query = urllib.parse.quote(f'"{short_probe}"')
+        target_url = f"https://scholar.google.com/scholar?q={query}"
+        
+        scrapingbee_key = "8IP8RZJY253EBD63MNWTQYSVPAAOKCOJ0TTZ3D6A8JMEXD2W6OSV5M75COHT4P0KSRG6FMAAQ41GG7U9"
+        api_url = "https://app.scrapingbee.com/api/v1/"
+        params = {
+            "api_key": scrapingbee_key,
+            "url": target_url,
+            "render_js": "false",
+            "premium_proxy": "true",
+            "country_code": "id"
+        }
+        res = requests.get(api_url, params=params, timeout=15)
+        if res.status_code == 200:
+            html = res.text
+            from bs4 import BeautifulSoup
+            soup = BeautifulSoup(html, 'html.parser')
+            for h3 in soup.find_all('h3', class_='gs_rt'):
+                a_tag = h3.find('a')
+                if a_tag and 'href' in a_tag.attrs:
+                    urls_found.append(a_tag['href'])
+    except:
+        pass
+    return urls_found, []
+
+def fetch_garuda(probe):
+    """Mencari Portal Jurnal Nasional (Garuda Kemdikbud/SINTA) via ScraperAPI Proxy"""
+    urls_found = []
+    try:
+        import urllib.parse
+        short_probe = " ".join(probe.split()[:15])
+        query = urllib.parse.quote(f'"{short_probe}"')
+        target_url = f"https://garuda.kemdikbud.go.id/documents?q={query}"
+        
+        scraperapi_key = "1d38c8aa7ea146522ff27ff5415fef02"
+        api_url = "https://api.scraperapi.com/"
+        params = {
+            "api_key": scraperapi_key,
+            "url": target_url,
+            "render": "false"
+        }
+        res = requests.get(api_url, params=params, timeout=15)
+        if res.status_code == 200:
+            html = res.text
+            from bs4 import BeautifulSoup
+            soup = BeautifulSoup(html, 'html.parser')
+            for a_tag in soup.select('a.title-article'):
+                if 'href' in a_tag.attrs:
+                    url = a_tag['href']
+                    if not url.startswith('http'):
+                        url = "https://garuda.kemdikbud.go.id" + url
+                    urls_found.append(url)
+    except:
+        pass
+    return urls_found, []
+
 def fetch_ddgs(probe):
     """Mencari website publik biasa via DuckDuckGo, dengan Prioritas Situs Kampus/Jurnal"""
     urls_found = []
@@ -151,13 +213,18 @@ def fetch_probe_multi(probe):
     u_ss, t_ss = fetch_semantic_scholar(probe)
     u_cr, t_cr = fetch_crossref(probe)
     u_oa, t_oa = fetch_openalex(probe)
+    u_gs, _ = fetch_google_scholar(probe)
+    u_gr, _ = fetch_garuda(probe)
     u_dd, _ = fetch_ddgs(probe)
     
     # Gabungkan URL yang sudah ada abstraknya
     api_urls = u_ss + u_cr + u_oa
     api_texts = t_ss + t_cr + t_oa
     
-    return api_urls, api_texts, u_dd
+    # URL biasa yang perlu discrape kontennya
+    normal_urls = u_gs + u_gr + u_dd
+    
+    return api_urls, api_texts, normal_urls
 
 def get_candidate_urls(sentences, max_probes=100, progress_cb=None):
     """
@@ -300,8 +367,8 @@ def get_candidate_urls(sentences, max_probes=100, progress_cb=None):
 
     print(f"[API] Mencari jurnal dari {len(probes)} sampel kalimat via Semantic Scholar, Crossref & DuckDuckGo...")
     
-    # Kurangi worker jadi 8 agar DuckDuckGo tidak langsung memblokir, tapi tetap cukup cepat
-    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+    # Gunakan max_workers=5 agar ScrapingBee dan ScraperAPI tidak menolak request karena melanggar batas concurrency Free Tier
+    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
         futures = [executor.submit(fetch_probe_multi, p) for p in probes]
         for i, future in enumerate(concurrent.futures.as_completed(futures)):
             if progress_cb:
