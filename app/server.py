@@ -160,6 +160,7 @@ if __name__ == '__main__':
             pass
         
         # Eksekusi pemusnahan diri paksa dari tingkat OS untuk menghindari Ghost Process
+        os.system("taskkill /F /IM ngrok.exe >nul 2>&1")
         os.system(f"taskkill /F /PID {os.getpid()} >nul 2>&1")
         os._exit(0)
     
