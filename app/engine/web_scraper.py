@@ -232,9 +232,15 @@ def get_candidate_urls(sentences, max_probes=100, progress_cb=None):
     1. urls (List URL web biasa untuk discrape manual)
     2. preloaded_corpus (Dict berisi teks abstrak/jurnal berbayar yang langsung didapat via API)
     """
-    # Prioritaskan kalimat terpanjang karena lebih spesifik/unik (menghindari hasil generik)
-    sentences_sorted = sorted(sentences, key=lambda s: len(s.split()), reverse=True)
-    probes = sentences_sorted[:max_probes]
+    # Meniru algoritma Turnitin (Winnowing/Fingerprinting): 
+    # Jangan hanya ambil kalimat terpanjang, tapi ambil sampel kalimat secara MERATA dari seluruh bagian dokumen (Bab 1 - Bab 5).
+    valid_sentences = [s for s in sentences if len(s.split()) >= 8]
+    if len(valid_sentences) <= max_probes:
+        probes = valid_sentences
+    else:
+        step = len(valid_sentences) / max_probes
+        probes = [valid_sentences[int(i * step)] for i in range(max_probes)]
+        
     urls = set()
     preloaded_corpus = {}
     
