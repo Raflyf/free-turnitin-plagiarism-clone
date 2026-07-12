@@ -80,9 +80,9 @@ def fetch_ddgs(probe):
         short_probe = " ".join(probe.split()[:15])
         
         import random
-        # Gunakan "jurnal OR repository" pada 50% probabilitas untuk memaksa DuckDuckGo menemukan repositori kampus
+        # Gunakan filter tambahan pada 50% probabilitas untuk memaksa mesin menemukan repositori kampus dan Garuda Ristekdikti
         if random.random() > 0.5:
-            query = f'{short_probe} (jurnal OR repository OR skripsi)'
+            query = f'{short_probe} (jurnal OR repository OR skripsi OR site:garuda.kemdikbud.go.id)'
         else:
             query = f'{short_probe}'
             
@@ -167,7 +167,7 @@ def get_candidate_urls(sentences, max_probes=100, progress_cb=None):
             
         import concurrent.futures
         with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
-            for c_urls in executor.map(fetch_pplx, probes[:50]):
+            for c_urls in executor.map(fetch_pplx, probes[:100]):
                 for u in c_urls:
                     if u and u.startswith('http'):
                         urls.add(u)
