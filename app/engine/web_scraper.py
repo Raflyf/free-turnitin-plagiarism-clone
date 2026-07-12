@@ -161,10 +161,13 @@ def fetch_google_web(probe):
             html = res.text
             from bs4 import BeautifulSoup
             soup = BeautifulSoup(html, 'html.parser')
-            # Google Search structure usually has a tags in div class='yuRUbf' or similar
-            for a_tag in soup.select('div.yuRUbf a'):
-                if 'href' in a_tag.attrs and a_tag['href'].startswith('http'):
-                    urls_found.append(a_tag['href'])
+            # Ekstrak SEMUA link karena struktur Google berubah-ubah
+            for a_tag in soup.find_all('a'):
+                if 'href' in a_tag.attrs:
+                    link = a_tag['href']
+                    # Filter link valid (hindari link internal Google seperti accounts.google.com, dll)
+                    if link.startswith('http') and 'google.com' not in link and 'google.co.id' not in link:
+                        urls_found.append(link)
     except:
         pass
     return urls_found, []
@@ -281,14 +284,15 @@ def get_candidate_urls(sentences, max_probes=100, progress_cb=None):
     2. preloaded_corpus (Dict berisi teks abstrak/jurnal berbayar yang langsung didapat via API)
     """
     # Hibrida Algoritma: 
-    # 1. 25 Fingerprint dari kalimat terpanjang (Mencegah pencarian gagal karena kalimat umum)
-    # 2. 25 Fingerprint Uniform Sampling (Memastikan Bab 1 s/d Bab 5 tersisir rata layaknya Turnitin)
+    # 1. Separuh Fingerprint dari kalimat terpanjang (Mencegah pencarian gagal karena kalimat umum)
+    # 2. Separuh Fingerprint Uniform Sampling (Memastikan Bab 1 s/d Bab 5 tersisir rata layaknya Turnitin)
     valid_sentences = [s for s in sentences if len(s.split()) >= 8]
     if len(valid_sentences) <= max_probes:
         probes = valid_sentences
     else:
-        # Ambil 25 Terpanjang
-        longest = sorted(valid_sentences, key=lambda s: len(s.split()), reverse=True)[:25]
+        # Ambil 50% Terpanjang
+        half = max_probes // 2
+        longest = sorted(valid_sentences, key=lambda s: len(s.split()), reverse=True)[:half]
         
         # Ambil sisanya secara merata, JANGAN sertakan yang sudah masuk di 'longest'
         remaining_needed = max_probes - len(longest)
