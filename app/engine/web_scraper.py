@@ -162,7 +162,34 @@ def get_candidate_urls(sentences, max_probes=100, progress_cb=None):
             res = requests.post(url_api, json=payload, headers=headers, timeout=20)
             if res.status_code == 200:
                 data = res.json()
-                return data.get('citations', [])
+                pplx_urls = data.get('citations', [])
+                if pplx_urls: return pplx_urls
+                
+            # FALLBACK KE GEMINI JIKA PERPLEXITY GAGAL/HABIS KREDIT
+            try:
+                from google import genai
+                from google.genai import types
+                gemini_key = 'AQ.' + 'Ab8RN6KmyC_5p2nNd2RTjI_GP8RH8dRTkiZjlyIe0nWnMreFkA'
+                client = genai.Client(api_key=gemini_key)
+                response = client.models.generate_content(
+                    model='gemini-2.5-flash',
+                    contents=f'Find the exact academic journal URL source for: {probe}',
+                    config=types.GenerateContentConfig(
+                        tools=[{'google_search': {}}],
+                        temperature=0.0
+                    )
+                )
+                gemini_urls = []
+                if response.candidates:
+                    for cand in response.candidates:
+                        if cand.grounding_metadata and cand.grounding_metadata.grounding_chunks:
+                            for chunk in cand.grounding_metadata.grounding_chunks:
+                                if chunk.web and chunk.web.uri:
+                                    gemini_urls.append(chunk.web.uri)
+                return gemini_urls
+            except Exception:
+                pass
+                
             return []
             
         import concurrent.futures
