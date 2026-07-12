@@ -205,9 +205,6 @@ def get_candidate_urls(sentences, max_probes=100, progress_cb=None):
             except Exception as e:
                 pass
                 
-            if progress_cb:
-                progress_cb(i + 1, total)
-                
     print(f"[API] Berhasil menarik {len(preloaded_corpus)} abstrak jurnal dan {len(urls)} link web publik.")
     return list(urls), preloaded_corpus
 
