@@ -4,10 +4,10 @@ def get_sentences(text):
     sentences = re.split(r'(?<=[.!?]) +', text)
     return [s.strip() for s in sentences if len(s.split()) >= 3]
 
-def get_ngrams(text, n=5):
+def get_ngrams(text, n=4):
     """
     Menghasilkan N-Grams dari teks.
-    Turnitin default menggunakan threshold 5 kata berurutan.
+    Turnitin default menggunakan threshold 4 kata berurutan.
     """
     # 1. OPTIMALISASI PRE-PROCESSING: Gabungkan kata yang terpisah oleh tanda hubung (hyphen) di akhir baris
     text = re.sub(r'-\s+', '', text)
@@ -16,7 +16,7 @@ def get_ngrams(text, n=5):
     words = text.lower().split()
     return [" ".join(words[i:i+n]) for i in range(len(words)-n+1)]
 
-def get_shingles(text, n=5):
+def get_shingles(text, n=4):
     return set(get_ngrams(text, n))
 
 def calculate_similarity(doc_text, corpus, exclude_small=False):
@@ -46,13 +46,13 @@ def calculate_similarity(doc_text, corpus, exclude_small=False):
     if not domain_corpus:
         return [], 0.0, []
 
-    total_doc_ngrams = set(get_ngrams(doc_text, n=5))
+    total_doc_ngrams = set(get_ngrams(doc_text, n=4))
     
     sources_report = {}
     
     # 2. Hitung Kemiripan per Sumber secara Matematis Akurat
     for domain, source_text in domain_corpus.items():
-        s_ngrams = set(get_ngrams(source_text, n=5))
+        s_ngrams = set(get_ngrams(source_text, n=4))
         overlap_ngrams = total_doc_ngrams.intersection(s_ngrams)
         
         if not overlap_ngrams:
@@ -62,10 +62,10 @@ def calculate_similarity(doc_text, corpus, exclude_small=False):
         clean_doc_words = [re.sub(r'[^\w\s]', '', w).lower() for w in doc_words]
         is_matched_source = [False] * len(doc_words)
         
-        for i in range(len(doc_words) - 5 + 1):
-            ngram = " ".join(clean_doc_words[i:i+5])
+        for i in range(len(doc_words) - 4 + 1):
+            ngram = " ".join(clean_doc_words[i:i+4])
             if ngram in overlap_ngrams:
-                for j in range(5):
+                for j in range(4):
                     is_matched_source[i+j] = True
                     
         matched_word_count = sum(is_matched_source)
@@ -99,10 +99,10 @@ def calculate_similarity(doc_text, corpus, exclude_small=False):
     is_matched_global = [False] * len(doc_words)
     
     # Tandai seluruh array kata dokumen
-    for i in range(len(doc_words) - 5 + 1):
-        ngram = " ".join(clean_doc_words[i:i+5])
+    for i in range(len(doc_words) - 4 + 1):
+        ngram = " ".join(clean_doc_words[i:i+4])
         if ngram in global_overlap_ngrams:
-            for j in range(i, i+5):
+            for j in range(i, i+4):
                 is_matched_global[j] = True
 
     # Bangun kalimat yang di-highlight berdasarkan is_matched_global
@@ -112,11 +112,11 @@ def calculate_similarity(doc_text, corpus, exclude_small=False):
             current_phrase.append(doc_words[i])
         else:
             if current_phrase:
-                if len(current_phrase) >= 5:
+                if len(current_phrase) >= 4:
                     phrase_text = " ".join(current_phrase)
                     
                     # Cari sumber utama yang menyumbang frasa ini untuk pewarnaan
-                    p_ngrams = set(get_ngrams(phrase_text, n=5))
+                    p_ngrams = set(get_ngrams(phrase_text, n=4))
                     best_source_id = 1
                     best_overlap = 0
                     for idx, source in enumerate(top_sources):
@@ -131,7 +131,7 @@ def calculate_similarity(doc_text, corpus, exclude_small=False):
                     })
                 current_phrase = []
                 
-    if current_phrase and len(current_phrase) >= 5:
+    if current_phrase and len(current_phrase) >= 4:
         phrase_text = " ".join(current_phrase)
         plagiarized_sentences_data.append({
             'text': phrase_text,

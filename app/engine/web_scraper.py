@@ -277,7 +277,7 @@ def fetch_probe_multi(probe):
     
     return api_urls, api_texts, normal_urls
 
-def get_candidate_urls(sentences, max_probes=100, progress_cb=None):
+def get_candidate_urls(sentences, max_probes=50, progress_cb=None):
     """
     Fungsi ini kini mengembalikan dua hal:
     1. urls (List URL web biasa untuk discrape manual)
