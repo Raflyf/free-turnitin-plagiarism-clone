@@ -16,7 +16,7 @@ def fetch_semantic_scholar(probe):
         url = "https://api.semanticscholar.org/graph/v1/paper/search"
         short_probe = " ".join(probe.split()[:15])
         params = {
-            "query": f'"{short_probe}"',
+            "query": short_probe,
             "limit": 5,
             "fields": "title,abstract,url"
         }
@@ -45,7 +45,7 @@ def fetch_crossref(probe):
         url = "https://api.crossref.org/works"
         short_probe = " ".join(probe.split()[:15])
         params = {
-            "query": f'"{short_probe}"',
+            "query": short_probe,
             "select": "URL,title,abstract",
             "rows": 15,
             "mailto": "research_turnitin_local@university.edu"
@@ -79,7 +79,7 @@ def fetch_openalex(probe):
         url = "https://api.openalex.org/works"
         short_probe = " ".join(probe.split()[:15])
         params = {
-            "search": f'"{short_probe}"',
+            "search": short_probe,
             "per_page": 5,
             "mailto": "research_turnitin_local@university.edu"
         }
@@ -104,7 +104,7 @@ def fetch_google_scholar(probe):
     try:
         import urllib.parse
         short_probe = " ".join(probe.split()[:15])
-        query = urllib.parse.quote(f'"{short_probe}"')
+        query = urllib.parse.quote(short_probe)
         target_url = f"https://scholar.google.com/scholar?q={query}"
         
         scrapingbee_key = "8IP8RZJY253EBD63MNWTQYSVPAAOKCOJ0TTZ3D6A8JMEXD2W6OSV5M75COHT4P0KSRG6FMAAQ41GG7U9"
@@ -135,7 +135,7 @@ def fetch_garuda(probe):
     try:
         import urllib.parse
         short_probe = " ".join(probe.split()[:15])
-        query = urllib.parse.quote(f'"{short_probe}"')
+        query = urllib.parse.quote(short_probe)
         target_url = f"https://garuda.kemdikbud.go.id/documents?q={query}"
         
         scraperapi_key = "1d38c8aa7ea146522ff27ff5415fef02"
@@ -351,10 +351,10 @@ def get_candidate_urls(sentences, max_probes=100, progress_cb=None):
             
         import concurrent.futures
         with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
-            futures_pplx = {executor.submit(fetch_pplx, (i, p)): i for i, p in enumerate(probes[:100])}
+            futures_pplx = {executor.submit(fetch_pplx, (i, p)): i for i, p in enumerate(probes)}
             for i, future in enumerate(concurrent.futures.as_completed(futures_pplx)):
                 if progress_cb:
-                    progress_cb(futures_pplx[future] + 1, len(probes[:100]) + len(probes))
+                    progress_cb(futures_pplx[future] + 1, len(probes) + len(probes))
                 try:
                     c_urls = future.result()
                     for u in c_urls:
@@ -393,15 +393,17 @@ def get_candidate_urls(sentences, max_probes=100, progress_cb=None):
     return list(urls), preloaded_corpus
 
 def scrape_url(url):
-    """Bot Crawler untuk meniru TurnitinBot (Mendukung HTML dan PDF)"""
+    """Mengekstrak teks mentah dari URL (Website atau PDF) menggunakan AbstractAPI Proxy untuk menembus WAF/Cloudflare"""
     try:
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.5',
-            'Connection': 'keep-alive'
-        }
-        res = requests.get(url, headers=headers, timeout=30, verify=False) # Naikkan timeout untuk HTML repositori lambat
+        import urllib.parse
+        encoded_url = urllib.parse.quote(url)
+        abstract_key = "ee2f030615c9473c843d35b7fa880c30"
+        proxy_url = f"https://scrape.abstractapi.com/v1/?api_key={abstract_key}&url={encoded_url}"
+        
+        # Naikkan timeout agar proses scrape web lambat (misal repositori kampus) tidak langsung gagal,
+        # tapi cukup agresif (15 detik) untuk mencegah sistem tersedak.
+        res = requests.get(proxy_url, timeout=15)
+        
         if res.status_code == 200:
             import re
             
@@ -435,15 +437,22 @@ def scrape_url(url):
                 pdf_text = ""
                 if pdf_links:
                     import fitz
-                    # Ambil maksimal 5 file PDF per halaman untuk efisiensi (Biasanya Bab 1-5 atau Full Text)
-                    for pdf_url in pdf_links[:5]:
+                    # Ambil MAKSIMAL 3 file PDF per halaman untuk mencegah server tersedak (Hanging Process)
+                    for pdf_url in pdf_links[:3]:
                         try:
-                            # Repositori kampus di Indonesia seringkali sangat lambat (bisa butuh 30-60 detik untuk 1 file skripsi)
-                            pdf_res = requests.get(pdf_url, headers=headers, timeout=60, verify=False)
+                            # Gunakan AbstractAPI lagi untuk mendownload PDF jika dilindungi Cloudflare
+                            encoded_pdf = urllib.parse.quote(pdf_url)
+                            proxy_pdf = f"https://scrape.abstractapi.com/v1/?api_key={abstract_key}&url={encoded_pdf}"
+                            
+                            # Timeout sangat ketat (10 detik) untuk PDF. Jika server terlalu lemot, lewati!
+                            pdf_res = requests.get(proxy_pdf, timeout=10)
+                            
                             # Verifikasi apakah benar-benar PDF (Magic number %PDF)
                             if 'application/pdf' in pdf_res.headers.get('Content-Type', '').lower() or pdf_res.content.startswith(b'%PDF'):
                                 pdf_doc = fitz.open(stream=pdf_res.content, filetype="pdf")
-                                for page in pdf_doc:
+                                # Hanya baca 5 halaman awal per PDF (Mencegah mesin nyangkut di PDF 300 halaman)
+                                for page_num, page in enumerate(pdf_doc):
+                                    if page_num >= 5: break
                                     pdf_text += page.get_text() + " "
                         except:
                             pass

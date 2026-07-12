@@ -38,8 +38,8 @@ def process_document(file_id, filepath, original_filename, exclude_quotes=True, 
             pct = 5 + int((completed / total) * 35) # 5% to 40%
             set_progress(pct, f"Mencari web ({completed}/{total})...")
             
-        print(f"[!] Mencari kandidat dari web (Mode Deep Search: 150 Kalimat Panjang)...")
-        urls, preloaded_corpus = get_candidate_urls(sentences, max_probes=150, progress_cb=ddg_progress)
+        print(f"[!] Mencari kandidat dari web (Mode Deep Search: 20 Kalimat Panjang)...")
+        urls, preloaded_corpus = get_candidate_urls(sentences, max_probes=20, progress_cb=ddg_progress)
         
         def scrape_progress(completed, total):
             pct = 40 + int((completed / total) * 40) # 40% to 80%
