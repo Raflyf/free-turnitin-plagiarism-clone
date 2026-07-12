@@ -153,8 +153,8 @@ def scrape_url(url):
             for script in soup(["script", "style", "nav", "footer", "header", "aside", "menu"]):
                 script.decompose()
             
-            paragraphs = soup.find_all(['p', 'article', 'div', 'span'])
-            text = " ".join([p.get_text() for p in paragraphs])
+            # Ekstrak seluruh teks yang tersisa dengan spasi sebagai pemisah
+            text = soup.get_text(separator=' ')
             import re
             text = re.sub(r'\s+', ' ', text).strip()
             return url, text
