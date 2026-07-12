@@ -242,17 +242,18 @@ def get_candidate_urls(sentences, max_probes=100, progress_cb=None):
         # Ambil 25 Terpanjang
         longest = sorted(valid_sentences, key=lambda s: len(s.split()), reverse=True)[:25]
         
-        # Ambil sisanya (max_probes - 25) secara merata (Uniform)
-        uniform_count = max_probes - 25
-        if uniform_count > 0:
-            step = len(valid_sentences) / uniform_count
-            uniform = [valid_sentences[int(i * step)] for i in range(uniform_count)]
+        # Ambil sisanya secara merata, JANGAN sertakan yang sudah masuk di 'longest'
+        remaining_needed = max_probes - len(longest)
+        uniform_candidates = [s for s in valid_sentences if s not in longest]
+        
+        if remaining_needed > 0 and uniform_candidates:
+            step = len(uniform_candidates) / remaining_needed
+            uniform = [uniform_candidates[int(i * step)] for i in range(remaining_needed)]
         else:
             uniform = []
             
-        # Gabungkan dan hapus duplikat sambil mempertahankan sedikit acakan
-        combined = list(set(longest + uniform))
-        probes = combined[:max_probes]
+        # Gabungkan tanpa takut duplikat
+        probes = (longest + uniform)[:max_probes]
         
     urls = set()
     preloaded_corpus = {}
