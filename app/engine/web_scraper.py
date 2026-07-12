@@ -161,7 +161,7 @@ def get_candidate_urls(sentences, max_probes=100, progress_cb=None):
                     'model': 'sonar',
                     'messages': [
                         {'role': 'system', 'content': 'Find the exact academic journal or repository source for this text. Return URLs in citations.'},
-                        {'role': 'user', 'content': f'Find exact source for: {probe}'}
+                        {'role': 'user', 'content': f'Find exact source for: {probe}. Prioritize PDF files (ext:pdf) and academic repos (site:ac.id).'}
                     ]
                 }
                 res = requests.post(url_api, json=payload, headers=headers, timeout=20)
@@ -191,7 +191,7 @@ def get_candidate_urls(sentences, max_probes=100, progress_cb=None):
                     client = genai.Client(api_key=gemini_keys[key_index])
                     response = client.models.generate_content(
                         model='gemini-2.5-flash',
-                        contents=f'Find the exact academic journal URL source for: {probe}',
+                        contents=f'Find the exact academic journal URL source for: {probe} (Use search operators like ext:pdf or site:ac.id)',
                         config=types.GenerateContentConfig(
                             tools=[{'google_search': {}}],
                             temperature=0.0
@@ -215,7 +215,7 @@ def get_candidate_urls(sentences, max_probes=100, progress_cb=None):
                     "Content-Type": "application/json"
                 }
                 payload = {
-                    "message": f"Find the exact academic journal URL source for: {probe}",
+                    "message": f'Find the exact academic journal URL source for: "{probe}". Focus on Indonesian repositories (site:ac.id) and PDF documents.',
                     "model": "command-r-plus",
                     "connectors": [{"id": "web-search"}],
                     "temperature": 0.0
@@ -236,7 +236,7 @@ def get_candidate_urls(sentences, max_probes=100, progress_cb=None):
                 tavily_url = "https://api.tavily.com/search"
                 payload = {
                     "api_key": tavily_key,
-                    "query": f'"{probe}"',
+                    "query": f'"{probe}" site:ac.id OR ext:pdf',
                     "search_depth": "basic",
                     "max_results": 5
                 }

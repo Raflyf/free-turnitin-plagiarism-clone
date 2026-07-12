@@ -9,6 +9,9 @@ def get_ngrams(text, n=5):
     Menghasilkan N-Grams dari teks.
     Turnitin default menggunakan threshold 5 kata berurutan.
     """
+    # 1. OPTIMALISASI PRE-PROCESSING: Gabungkan kata yang terpisah oleh tanda hubung (hyphen) di akhir baris
+    text = re.sub(r'-\s+', '', text)
+    # 2. Hapus semua tanda baca kecuali karakter alfanumerik dan spasi
     text = re.sub(r'[^\w\s]', '', text)
     words = text.lower().split()
     return [" ".join(words[i:i+n]) for i in range(len(words)-n+1)]
