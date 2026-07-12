@@ -143,7 +143,7 @@ def get_candidate_urls(sentences, max_probes=100, progress_cb=None):
     urls = set()
     preloaded_corpus = {}
     
-    print(f"[API] Meluncurkan Perplexity AI (Sonar) untuk 50 kalimat paling unik...")
+    print(f"[API] Meluncurkan Perplexity AI (Sonar) untuk 100 kalimat paling unik...")
     try:
         def fetch_pplx(probe):
             url_api = 'https://api.perplexity.ai/chat/completions'
