@@ -167,10 +167,17 @@ def get_candidate_urls(sentences, max_probes=100, progress_cb=None):
             
         import concurrent.futures
         with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
-            for c_urls in executor.map(fetch_pplx, probes[:100]):
-                for u in c_urls:
-                    if u and u.startswith('http'):
-                        urls.add(u)
+            futures_pplx = {executor.submit(fetch_pplx, p): i for i, p in enumerate(probes[:100])}
+            for future in concurrent.futures.as_completed(futures_pplx):
+                if progress_cb:
+                    progress_cb(futures_pplx[future] + 1, len(probes[:100]) + len(probes))
+                try:
+                    c_urls = future.result()
+                    for u in c_urls:
+                        if u and u.startswith('http'):
+                            urls.add(u)
+                except Exception:
+                    pass
     except Exception as e:
         print(f"[!] Perplexity API Error: {e}")
 
@@ -179,8 +186,10 @@ def get_candidate_urls(sentences, max_probes=100, progress_cb=None):
     # Kurangi worker jadi 8 agar DuckDuckGo tidak langsung memblokir, tapi tetap cukup cepat
     with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
         futures = [executor.submit(fetch_probe_multi, p) for p in probes]
-        total = len(futures)
         for i, future in enumerate(concurrent.futures.as_completed(futures)):
+            if progress_cb:
+                # Tambahkan offset progres dari Perplexity (100 kalimat)
+                progress_cb(min(100, len(probes)) + i + 1, min(100, len(probes)) + len(probes))
             try:
                 api_urls, api_texts, ddg_urls = future.result()
                 
