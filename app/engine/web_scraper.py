@@ -145,7 +145,8 @@ def get_candidate_urls(sentences, max_probes=100, progress_cb=None):
     
     print(f"[API] Meluncurkan Perplexity AI & Google Gemini untuk 100 kalimat paling unik...")
     try:
-        def fetch_pplx(probe):
+        def fetch_pplx(args):
+            idx, probe = args
             combined_urls = set()
             
             # 1. PERPLEXITY AI
@@ -171,35 +172,36 @@ def get_candidate_urls(sentences, max_probes=100, progress_cb=None):
             except Exception:
                 pass
                 
-            # 2. GEMINI AI GROUNDING
-            try:
-                from google import genai
-                from google.genai import types
-                gemini_key = 'AQ.' + 'Ab8RN6KmyC_5p2nNd2RTjI_GP8RH8dRTkiZjlyIe0nWnMreFkA'
-                client = genai.Client(api_key=gemini_key)
-                response = client.models.generate_content(
-                    model='gemini-2.5-flash',
-                    contents=f'Find the exact academic journal URL source for: {probe}',
-                    config=types.GenerateContentConfig(
-                        tools=[{'google_search': {}}],
-                        temperature=0.0
+            # 2. GEMINI AI GROUNDING (Dibatasi 15 kalimat agar lolos Rate Limit 15 RPM)
+            if idx < 15:
+                try:
+                    from google import genai
+                    from google.genai import types
+                    gemini_key = 'AQ.' + 'Ab8RN6KmyC_5p2nNd2RTjI_GP8RH8dRTkiZjlyIe0nWnMreFkA'
+                    client = genai.Client(api_key=gemini_key)
+                    response = client.models.generate_content(
+                        model='gemini-2.5-flash',
+                        contents=f'Find the exact academic journal URL source for: {probe}',
+                        config=types.GenerateContentConfig(
+                            tools=[{'google_search': {}}],
+                            temperature=0.0
+                        )
                     )
-                )
-                if response.candidates:
-                    for cand in response.candidates:
-                        if cand.grounding_metadata and cand.grounding_metadata.grounding_chunks:
-                            for chunk in cand.grounding_metadata.grounding_chunks:
-                                if chunk.web and chunk.web.uri:
-                                    combined_urls.add(chunk.web.uri)
-            except Exception:
-                pass
+                    if response.candidates:
+                        for cand in response.candidates:
+                            if cand.grounding_metadata and cand.grounding_metadata.grounding_chunks:
+                                for chunk in cand.grounding_metadata.grounding_chunks:
+                                    if chunk.web and chunk.web.uri:
+                                        combined_urls.add(chunk.web.uri)
+                except Exception:
+                    pass
                 
             return list(combined_urls)
             
         import concurrent.futures
         with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
-            futures_pplx = {executor.submit(fetch_pplx, p): i for i, p in enumerate(probes[:100])}
-            for future in concurrent.futures.as_completed(futures_pplx):
+            futures_pplx = {executor.submit(fetch_pplx, (i, p)): i for i, p in enumerate(probes[:100])}
+            for i, future in enumerate(concurrent.futures.as_completed(futures_pplx)):
                 if progress_cb:
                     progress_cb(futures_pplx[future] + 1, len(probes[:100]) + len(probes))
                 try:
