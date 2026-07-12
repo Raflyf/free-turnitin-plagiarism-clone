@@ -4,59 +4,157 @@ import requests
 import warnings
 from bs4 import BeautifulSoup, XMLParsedAsHTMLWarning
 from concurrent.futures import ThreadPoolExecutor
-from ddgs import DDGS
 
-# Sembunyikan peringatan jika situs web yang di-scrape kebetulan berupa XML/RSS
+# Sembunyikan peringatan jika situs web yang di-scrape berupa XML/RSS
 warnings.filterwarnings("ignore", category=XMLParsedAsHTMLWarning)
 
-def fetch_probe(probe):
-    """Mencari satu probe ke DuckDuckGo"""
+def fetch_semantic_scholar(probe):
+    """Mencari paper di Semantic Scholar (Mencakup 200 Juta+ Makalah Akademik)"""
+    urls_found = []
+    texts_found = []
+    try:
+        url = "https://api.semanticscholar.org/graph/v1/paper/search"
+        short_probe = " ".join(probe.split()[:15])
+        params = {
+            "query": short_probe,
+            "limit": 3,
+            "fields": "url,title,abstract,openAccessPdf"
+        }
+        res = requests.get(url, params=params, timeout=6)
+        if res.status_code == 200:
+            data = res.json()
+            for paper in data.get('data', []):
+                p_url = paper.get('url') or f"https://semanticscholar.org/paper/{paper.get('paperId','')}"
+                abstract = paper.get('abstract') or ""
+                title = paper.get('title') or ""
+                
+                combined_text = f"{title}. {abstract}"
+                if len(combined_text) > 50:
+                    urls_found.append(p_url)
+                    texts_found.append(combined_text)
+        time.sleep(1) # Hormati rate-limit 100 per 5 menit
+    except:
+        pass
+    return urls_found, texts_found
+
+def fetch_crossref(probe):
+    """Mencari metadata jurnal via Crossref (Repositori Terbesar DOI Jurnal)"""
+    urls_found = []
+    texts_found = []
+    try:
+        url = "https://api.crossref.org/works"
+        short_probe = " ".join(probe.split()[:15])
+        params = {
+            "query": short_probe,
+            "select": "URL,title,abstract",
+            "rows": 3,
+            "mailto": "research_turnitin_local@university.edu"
+        }
+        res = requests.get(url, params=params, timeout=6)
+        if res.status_code == 200:
+            data = res.json()
+            for item in data.get('message', {}).get('items', []):
+                p_url = item.get('URL', '')
+                title_list = item.get('title', [])
+                title = title_list[0] if title_list else ""
+                abstract = item.get('abstract', '')
+                
+                # Bersihkan tag HTML dari abstrak (CrossRef sering mengirim XML/HTML tags)
+                import re
+                abstract = re.sub(r'<[^>]+>', '', abstract)
+                
+                combined_text = f"{title}. {abstract}"
+                if p_url and len(combined_text) > 50:
+                    urls_found.append(p_url)
+                    texts_found.append(combined_text)
+    except:
+        pass
+    return urls_found, texts_found
+
+def fetch_ddgs(probe):
+    """Mencari website publik biasa via DuckDuckGo"""
     urls_found = []
     try:
+        from ddgs import DDGS
         ddgs = DDGS()
         short_probe = " ".join(probe.split()[:15])
-        results = ddgs.text(f'{short_probe}', max_results=8)
+        results = ddgs.text(f'{short_probe}', max_results=4)
         for res in list(results):
             if 'href' in res and not res['href'].endswith('.pdf'): 
                 urls_found.append(res['href'])
-        # Jeda lebih singkat karena sudah disebar ke beberapa thread
         time.sleep(random.uniform(0.5, 1.5))
-    except Exception as e:
+    except:
         pass
-    return urls_found
+    return urls_found, []
 
-def get_candidate_urls(sentences, max_probes=120, progress_cb=None):
-    """Mencari kandidat URL jurnal/referensi menggunakan sampel kalimat"""
+def fetch_probe_multi(probe):
+    """Mencari ke semua mesin secara serentak"""
+    u_ss, t_ss = fetch_semantic_scholar(probe)
+    u_cr, t_cr = fetch_crossref(probe)
+    u_dd, _ = fetch_ddgs(probe)
+    
+    # Gabungkan URL yang sudah ada abstraknya
+    api_urls = u_ss + u_cr
+    api_texts = t_ss + t_cr
+    
+    return api_urls, api_texts, u_dd
+
+def get_candidate_urls(sentences, max_probes=100, progress_cb=None):
+    """
+    Fungsi ini kini mengembalikan dua hal:
+    1. urls (List URL web biasa untuk discrape manual)
+    2. preloaded_corpus (Dict berisi teks abstrak/jurnal berbayar yang langsung didapat via API)
+    """
     probes = random.sample(sentences, min(len(sentences), max_probes))
     urls = set()
+    preloaded_corpus = {}
     
-    print(f"Mencari kandidat URL dari {len(probes)} sampel kalimat (Multi-Threading Cepat)...")
+    print(f"[API] Mencari jurnal dari {len(probes)} sampel kalimat via Semantic Scholar & Crossref...")
     
     import concurrent.futures
     with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
-        futures = [executor.submit(fetch_probe, p) for p in probes]
+        futures = [executor.submit(fetch_probe_multi, p) for p in probes]
         total = len(futures)
         for i, future in enumerate(concurrent.futures.as_completed(futures)):
-            urls.update(future.result())
+            try:
+                api_urls, api_texts, ddg_urls = future.result()
+                
+                # Masukkan hasil API langsung ke Corpus (tanpa perlu web-scrape)
+                for u, t in zip(api_urls, api_texts):
+                    preloaded_corpus[u] = t
+                    
+                # Masukkan hasil DuckDuckGo ke antrian URL scraping
+                for u in ddg_urls:
+                    if u not in preloaded_corpus:
+                        urls.add(u)
+                        
+            except Exception as e:
+                pass
+                
             if progress_cb:
                 progress_cb(i + 1, total)
-            
-    print(f"Berhasil mengumpulkan {len(urls)} kandidat URL.")
-    return list(urls)
+                
+    print(f"[API] Berhasil menarik {len(preloaded_corpus)} abstrak jurnal dan {len(urls)} link web publik.")
+    return list(urls), preloaded_corpus
 
 def scrape_url(url):
-    """Mengunduh konten teks dari suatu URL (Mirip crawler bot Turnitin)"""
+    """Bot Crawler untuk meniru TurnitinBot"""
     try:
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5',
+            'Connection': 'keep-alive'
         }
-        res = requests.get(url, headers=headers, timeout=8)
+        res = requests.get(url, headers=headers, timeout=8, verify=False) # Abaikan SSL error untuk blogspot lama
         if res.status_code == 200:
             soup = BeautifulSoup(res.text, 'html.parser')
-            # Ambil semua teks dari tag paragraf
-            paragraphs = soup.find_all(['p', 'div', 'span'])
+            # Hapus tag yang tidak berisi konten ilmiah
+            for script in soup(["script", "style", "nav", "footer", "header", "aside", "menu"]):
+                script.decompose()
+            
+            paragraphs = soup.find_all(['p', 'article', 'div', 'span'])
             text = " ".join([p.get_text() for p in paragraphs])
-            # Bersihkan teks
             import re
             text = re.sub(r'\s+', ' ', text).strip()
             return url, text
@@ -64,19 +162,29 @@ def scrape_url(url):
         pass
     return url, ""
 
-def scrape_all_candidates(urls, progress_cb=None):
-    """Mengeksekusi multi-threading untuk mendownload isi artikel dari web"""
-    corpus = {}
-    print(f"Mengunduh isi dari {len(urls)} sumber web secara paralel...")
+def scrape_all_candidates(urls, preloaded_corpus, progress_cb=None):
+    """Mengeksekusi multi-threading untuk mengunduh web, lalu digabung dengan preloaded_corpus (Jurnal API)"""
+    corpus = preloaded_corpus.copy()
+    if not urls:
+        return corpus
+        
+    print(f"[Scraper] Bot Crawler mulai mengunduh {len(urls)} sumber web publik...")
+    
+    # Abaikan InsecureRequestWarning saat scrape blog/kampus yang SSL-nya mati
+    from requests.packages.urllib3.exceptions import InsecureRequestWarning
+    requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
     
     import concurrent.futures
     with concurrent.futures.ThreadPoolExecutor(max_workers=40) as executor:
         futures = [executor.submit(scrape_url, u) for u in urls]
         total = len(futures)
         for i, future in enumerate(concurrent.futures.as_completed(futures)):
-            url, text = future.result()
-            if len(text) > 100: # Hanya simpan web yang memiliki konten valid
-                corpus[url] = text
+            try:
+                url, text = future.result()
+                if len(text) > 150: # Validasi panjang minimal teks
+                    corpus[url] = text
+            except:
+                pass
             if progress_cb:
                 progress_cb(i + 1, total)
                 

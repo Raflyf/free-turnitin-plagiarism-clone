@@ -31,7 +31,7 @@ def process_document(file_id, filepath, original_filename, exclude_quotes=True, 
     try:
         set_progress(5, "Mengekstrak teks dari PDF...")
         print(f"[!] Mulai ekstraksi teks dari: {filepath}")
-        doc_text = extract_text_from_pdf(filepath, exclude_quotes, exclude_biblio)
+        doc_text, manipulation_warnings = extract_text_from_pdf(filepath, exclude_quotes, exclude_biblio)
         sentences = get_sentences(doc_text)
         
         def ddg_progress(completed, total):
@@ -39,7 +39,7 @@ def process_document(file_id, filepath, original_filename, exclude_quotes=True, 
             set_progress(pct, f"Mencari web ({completed}/{total})...")
             
         print(f"[!] Mencari kandidat dari web...")
-        urls = get_candidate_urls(sentences, max_probes=120, progress_cb=ddg_progress)
+        urls, preloaded_corpus = get_candidate_urls(sentences, max_probes=120, progress_cb=ddg_progress)
         
         def scrape_progress(completed, total):
             pct = 40 + int((completed / total) * 40) # 40% to 80%
@@ -47,7 +47,7 @@ def process_document(file_id, filepath, original_filename, exclude_quotes=True, 
             set_progress(pct, f"Mengunduh isi web ({completed}/{total})...")
             
         print(f"[!] Mengunduh teks dari {len(urls)} kandidat...")
-        corpus = scrape_all_candidates(urls, progress_cb=scrape_progress)
+        corpus = scrape_all_candidates(urls, preloaded_corpus, progress_cb=scrape_progress)
         
         set_progress(85, "Menghitung kemiripan (Algoritma N-Gram)...")
         print("[!] Menghitung similaritas dengan algoritma N-Gram Shingling...")
@@ -57,7 +57,8 @@ def process_document(file_id, filepath, original_filename, exclude_quotes=True, 
             'filename': original_filename.replace('.pdf', ''),
             'total_similarity': int(math.floor(total_similarity)),
             'sources': sorted_sources,
-            'plagiarized_sentences': plagiarized_sentences
+            'plagiarized_sentences': plagiarized_sentences,
+            'manipulation_warnings': manipulation_warnings
         }
         
         set_progress(95, "Membangun Laporan PDF...")

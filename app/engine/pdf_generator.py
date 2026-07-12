@@ -82,10 +82,10 @@ def generate_report_pdf(original_pdf_path, output_pdf_path, data):
             color = get_color_for_source(source_id)
             words = text.split()
             
-            if len(words) >= 3:
-                chunk_first = " ".join(words[:3]).lower()
-                chunk_mid = " ".join(words[len(words)//2 : len(words)//2+3]).lower()
-                chunk_last = " ".join(words[-3:]).lower()
+            if len(words) >= 5:
+                chunk_first = " ".join(words[:5]).lower()
+                chunk_mid = " ".join(words[len(words)//2 : len(words)//2+5]).lower()
+                chunk_last = " ".join(words[-5:]).lower()
                 
                 if chunk_first not in page_text_clean and chunk_mid not in page_text_clean and chunk_last not in page_text_clean:
                     continue
@@ -112,13 +112,13 @@ def generate_report_pdf(original_pdf_path, output_pdf_path, data):
                     found_any = True
                 
             # Jika terpotong parah antar-halaman, gunakan non-overlapping stepping window!
-            if not found_any and len(words) >= 3:
-                # Gunakan step=3 agar tidak ada kotak warna yang saling menindih
-                for i in range(0, len(words), 3):
-                    chunk = " ".join(words[i:i+3])
-                    # Jika sisa < 3 kata, ambil 3 kata terakhir untuk memastikan konteks pencarian spesifik
-                    if len(chunk.split()) < 3 and len(words) >= 3:
-                        chunk = " ".join(words[-3:])
+            if not found_any and len(words) >= 5:
+                # Gunakan step=5 agar tidak ada kotak warna yang saling menindih
+                for i in range(0, len(words), 5):
+                    chunk = " ".join(words[i:i+5])
+                    # Jika sisa < 5 kata, ambil 5 kata terakhir untuk memastikan konteks pencarian spesifik
+                    if len(chunk.split()) < 5 and len(words) >= 5:
+                        chunk = " ".join(words[-5:])
                         
                     insts = page.search_for(chunk, quads=True)
                     for inst in insts:
@@ -134,12 +134,12 @@ def generate_report_pdf(original_pdf_path, output_pdf_path, data):
                         if not first_rect:
                             first_rect = inst.rect
                             
-            elif not found_any and len(words) == 2:
+            elif not found_any and len(words) >= 2:
                 chunk = " ".join(words)
                 insts = page.search_for(chunk, quads=True)
                 for inst in insts:
                     if is_overlapping(inst.rect):
-                        print(f"[Anti-Overlap] Memblokir penumpukan warna pada 2-kata: {chunk[:30]}...")
+                        print(f"[Anti-Overlap] Memblokir penumpukan warna pada frasa pendek: {chunk[:30]}...")
                         continue
                     highlighted_rects.append(inst.rect)
                     
@@ -163,6 +163,15 @@ def generate_report_pdf(original_pdf_path, output_pdf_path, data):
     report_page.insert_text((margin_left, y_pos), f"{os.path.basename(original_pdf_path)}", fontsize=18, fontname="helv")
     y_pos += 30
     
+    if 'manipulation_warnings' in data and data['manipulation_warnings']:
+        report_page.insert_text((margin_left, y_pos), "MANIPULASI TEKS TERDETEKSI:", fontsize=12, fontname="helv-bo", color=(1.0, 0.0, 0.0))
+        y_pos += 20
+        for warning in data['manipulation_warnings']:
+            # Peringkat merah keras
+            report_page.insert_text((margin_left + 10, y_pos), warning, fontsize=10, fontname="helv", color=(1.0, 0.0, 0.0))
+            y_pos += 15
+        y_pos += 15
+        
     # Garis tebal
     report_page.draw_line(fitz.Point(margin_left, y_pos), fitz.Point(545, y_pos), color=(0,0,0), width=2)
     y_pos += 5
