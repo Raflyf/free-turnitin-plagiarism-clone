@@ -78,7 +78,7 @@ def fetch_ddgs(probe):
         from ddgs import DDGS
         ddgs = DDGS()
         short_probe = " ".join(probe.split()[:15])
-        results = ddgs.text(f'{short_probe}', max_results=4)
+        results = ddgs.text(f'{short_probe}', max_results=6)
         for res in list(results):
             if 'href' in res and not res['href'].endswith('.pdf'): 
                 urls_found.append(res['href'])
@@ -105,14 +105,17 @@ def get_candidate_urls(sentences, max_probes=100, progress_cb=None):
     1. urls (List URL web biasa untuk discrape manual)
     2. preloaded_corpus (Dict berisi teks abstrak/jurnal berbayar yang langsung didapat via API)
     """
-    probes = random.sample(sentences, min(len(sentences), max_probes))
+    # Prioritaskan kalimat terpanjang karena lebih spesifik/unik (menghindari hasil generik)
+    sentences_sorted = sorted(sentences, key=lambda s: len(s.split()), reverse=True)
+    probes = sentences_sorted[:max_probes]
     urls = set()
     preloaded_corpus = {}
     
     print(f"[API] Mencari jurnal dari {len(probes)} sampel kalimat via Semantic Scholar & Crossref...")
     
     import concurrent.futures
-    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+    # Kurangi worker jadi 5 agar DuckDuckGo tidak langsung memblokir karena spam request
+    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
         futures = [executor.submit(fetch_probe_multi, p) for p in probes]
         total = len(futures)
         for i, future in enumerate(concurrent.futures.as_completed(futures)):
