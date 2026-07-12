@@ -189,14 +189,44 @@ def scrape_url(url):
                 text = re.sub(r'\s+', ' ', text).strip()
                 return url, text
             else:
-                # Parsing HTML biasa
+                # Parsing HTML biasa (Landing Page Repositori)
                 soup = BeautifulSoup(res.text, 'html.parser')
+                
+                # [DEEP PDF CRAWLER] Cari tombol Download PDF di halaman ini
+                pdf_links = []
+                for a in soup.find_all('a', href=True):
+                    href = a['href']
+                    href_lower = href.lower()
+                    # Deteksi link PDF dari EPrints, DSpace, OJS, dsb.
+                    if href_lower.endswith('.pdf') or '/download/' in href_lower or '/bitstream/' in href_lower or '/article/view/' in href_lower:
+                        if href.startswith('/'):
+                            from urllib.parse import urljoin
+                            href = urljoin(url, href)
+                        if href not in pdf_links and href.startswith('http'):
+                            pdf_links.append(href)
+                
+                pdf_text = ""
+                if pdf_links:
+                    import fitz
+                    # Ambil maksimal 2 file PDF per halaman untuk efisiensi (Biasanya Bab 1-5 atau Full Text)
+                    for pdf_url in pdf_links[:2]:
+                        try:
+                            pdf_res = requests.get(pdf_url, headers=headers, timeout=15, verify=False)
+                            # Verifikasi apakah benar-benar PDF (Magic number %PDF)
+                            if 'application/pdf' in pdf_res.headers.get('Content-Type', '').lower() or pdf_res.content.startswith(b'%PDF'):
+                                pdf_doc = fitz.open(stream=pdf_res.content, filetype="pdf")
+                                for page in pdf_doc:
+                                    pdf_text += page.get_text() + " "
+                        except:
+                            pass
+                
                 # Hapus tag yang tidak berisi konten ilmiah
                 for script in soup(["script", "style", "nav", "footer", "header", "aside", "menu"]):
                     script.decompose()
                 
-                # Ekstrak seluruh teks yang tersisa dengan spasi sebagai pemisah
+                # Ekstrak teks HTML (abstrak) dan gabungkan dengan teks PDF (isi skripsi penuh)
                 text = soup.get_text(separator=' ')
+                text = text + " " + pdf_text
                 text = re.sub(r'\s+', ' ', text).strip()
                 return url, text
     except:
