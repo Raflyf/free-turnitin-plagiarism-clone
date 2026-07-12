@@ -16,7 +16,7 @@ def fetch_semantic_scholar(probe):
         url = "https://api.semanticscholar.org/graph/v1/paper/search"
         short_probe = " ".join(probe.split()[:15])
         params = {
-            "query": short_probe,
+            "query": f'"{short_probe}"',
             "limit": 5,
             "fields": "title,abstract,url"
         }
@@ -45,7 +45,7 @@ def fetch_crossref(probe):
         url = "https://api.crossref.org/works"
         short_probe = " ".join(probe.split()[:15])
         params = {
-            "query": short_probe,
+            "query": f'"{short_probe}"',
             "select": "URL,title,abstract",
             "rows": 15,
             "mailto": "research_turnitin_local@university.edu"
@@ -67,6 +67,33 @@ def fetch_crossref(probe):
                 if p_url and len(combined_text) > 50:
                     urls_found.append(p_url)
                     texts_found.append(combined_text)
+    except:
+        pass
+    return urls_found, texts_found
+
+def fetch_openalex(probe):
+    """Mencari metadata jurnal via OpenAlex (Repositori Terbesar Dunia - 250 Juta+ Dokumen)"""
+    urls_found = []
+    texts_found = []
+    try:
+        url = "https://api.openalex.org/works"
+        short_probe = " ".join(probe.split()[:15])
+        params = {
+            "search": f'"{short_probe}"',
+            "per_page": 5,
+            "mailto": "research_turnitin_local@university.edu"
+        }
+        res = requests.get(url, params=params, timeout=6)
+        if res.status_code == 200:
+            data = res.json()
+            for work in data.get("results", []):
+                p_url = work.get('doi') or work.get('id')
+                abstract = work.get('abstract_inverted_index')
+                title = work.get('title') or ""
+                # OpenAlex stores abstract as inverted index, hard to reconstruct easily without processing.
+                # So we just rely on URL discovery for now.
+                if p_url:
+                    urls_found.append(p_url)
     except:
         pass
     return urls_found, texts_found
@@ -123,11 +150,12 @@ def fetch_probe_multi(probe):
     """Mencari ke semua mesin secara serentak"""
     u_ss, t_ss = fetch_semantic_scholar(probe)
     u_cr, t_cr = fetch_crossref(probe)
+    u_oa, t_oa = fetch_openalex(probe)
     u_dd, _ = fetch_ddgs(probe)
     
     # Gabungkan URL yang sudah ada abstraknya
-    api_urls = u_ss + u_cr
-    api_texts = t_ss + t_cr
+    api_urls = u_ss + u_cr + u_oa
+    api_texts = t_ss + t_cr + t_oa
     
     return api_urls, api_texts, u_dd
 
