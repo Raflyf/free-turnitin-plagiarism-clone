@@ -174,7 +174,7 @@ def scrape_url(url):
             'Accept-Language': 'en-US,en;q=0.5',
             'Connection': 'keep-alive'
         }
-        res = requests.get(url, headers=headers, timeout=12, verify=False) # Naikkan timeout untuk PDF
+        res = requests.get(url, headers=headers, timeout=30, verify=False) # Naikkan timeout untuk HTML repositori lambat
         if res.status_code == 200:
             import re
             
@@ -211,7 +211,8 @@ def scrape_url(url):
                     # Ambil maksimal 2 file PDF per halaman untuk efisiensi (Biasanya Bab 1-5 atau Full Text)
                     for pdf_url in pdf_links[:2]:
                         try:
-                            pdf_res = requests.get(pdf_url, headers=headers, timeout=15, verify=False)
+                            # Repositori kampus di Indonesia seringkali sangat lambat (bisa butuh 30-60 detik untuk 1 file skripsi)
+                            pdf_res = requests.get(pdf_url, headers=headers, timeout=60, verify=False)
                             # Verifikasi apakah benar-benar PDF (Magic number %PDF)
                             if 'application/pdf' in pdf_res.headers.get('Content-Type', '').lower() or pdf_res.content.startswith(b'%PDF'):
                                 pdf_doc = fitz.open(stream=pdf_res.content, filetype="pdf")
