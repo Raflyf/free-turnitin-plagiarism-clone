@@ -16,7 +16,7 @@ def fetch_semantic_scholar(probe):
         url = "https://api.semanticscholar.org/graph/v1/paper/search"
         short_probe = " ".join(probe.split()[:15])
         params = {
-            "query": short_probe,
+            "query": f'"{short_probe}"',
             "limit": 5,
             "fields": "title,abstract,url"
         }
@@ -45,7 +45,7 @@ def fetch_crossref(probe):
         url = "https://api.crossref.org/works"
         short_probe = " ".join(probe.split()[:15])
         params = {
-            "query": short_probe,
+            "query": f'"{short_probe}"',
             "select": "URL,title,abstract",
             "rows": 15,
             "mailto": "research_turnitin_local@university.edu"
@@ -79,7 +79,7 @@ def fetch_openalex(probe):
         url = "https://api.openalex.org/works"
         short_probe = " ".join(probe.split()[:15])
         params = {
-            "search": short_probe,
+            "search": f'"{short_probe}"',
             "per_page": 5,
             "mailto": "research_turnitin_local@university.edu"
         }
@@ -104,7 +104,7 @@ def fetch_google_scholar(probe):
     try:
         import urllib.parse
         short_probe = " ".join(probe.split()[:15])
-        query = urllib.parse.quote(short_probe)
+        query = urllib.parse.quote(f'"{short_probe}"')
         target_url = f"https://scholar.google.com/scholar?q={query}"
         
         scrapingbee_key = "8IP8RZJY253EBD63MNWTQYSVPAAOKCOJ0TTZ3D6A8JMEXD2W6OSV5M75COHT4P0KSRG6FMAAQ41GG7U9"
@@ -135,7 +135,7 @@ def fetch_garuda(probe):
     try:
         import urllib.parse
         short_probe = " ".join(probe.split()[:15])
-        query = urllib.parse.quote(short_probe)
+        query = urllib.parse.quote(f'"{short_probe}"')
         target_url = f"https://garuda.kemdikbud.go.id/documents?q={query}"
         
         scraperapi_key = "1d38c8aa7ea146522ff27ff5415fef02"
@@ -232,19 +232,32 @@ def get_candidate_urls(sentences, max_probes=100, progress_cb=None):
     1. urls (List URL web biasa untuk discrape manual)
     2. preloaded_corpus (Dict berisi teks abstrak/jurnal berbayar yang langsung didapat via API)
     """
-    # Meniru algoritma Turnitin (Winnowing/Fingerprinting): 
-    # Jangan hanya ambil kalimat terpanjang, tapi ambil sampel kalimat secara MERATA dari seluruh bagian dokumen (Bab 1 - Bab 5).
+    # Hibrida Algoritma: 
+    # 1. 25 Fingerprint dari kalimat terpanjang (Mencegah pencarian gagal karena kalimat umum)
+    # 2. 25 Fingerprint Uniform Sampling (Memastikan Bab 1 s/d Bab 5 tersisir rata layaknya Turnitin)
     valid_sentences = [s for s in sentences if len(s.split()) >= 8]
     if len(valid_sentences) <= max_probes:
         probes = valid_sentences
     else:
-        step = len(valid_sentences) / max_probes
-        probes = [valid_sentences[int(i * step)] for i in range(max_probes)]
+        # Ambil 25 Terpanjang
+        longest = sorted(valid_sentences, key=lambda s: len(s.split()), reverse=True)[:25]
+        
+        # Ambil sisanya (max_probes - 25) secara merata (Uniform)
+        uniform_count = max_probes - 25
+        if uniform_count > 0:
+            step = len(valid_sentences) / uniform_count
+            uniform = [valid_sentences[int(i * step)] for i in range(uniform_count)]
+        else:
+            uniform = []
+            
+        # Gabungkan dan hapus duplikat sambil mempertahankan sedikit acakan
+        combined = list(set(longest + uniform))
+        probes = combined[:max_probes]
         
     urls = set()
     preloaded_corpus = {}
     
-    print(f"[API] Meluncurkan Perplexity AI & Google Gemini untuk 100 kalimat paling unik...")
+    print(f"[API] Meluncurkan Perplexity AI & Google Gemini untuk 35 Fingerprints...")
     try:
         def fetch_pplx(args):
             idx, probe = args
