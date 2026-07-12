@@ -421,6 +421,10 @@ def scrape_url(url):
         # tapi cukup agresif (15 detik) untuk mencegah sistem tersedak.
         res = requests.get(proxy_url, timeout=15)
         
+        # FALLBACK: Jika API Proxy habis limit (429) atau gagal (401), coba unduh langsung tanpa proxy!
+        if res.status_code != 200:
+            res = requests.get(url, timeout=15, verify=False)
+            
         if res.status_code == 200:
             total_bytes += len(res.content)
             import re
@@ -464,7 +468,12 @@ def scrape_url(url):
                             
                             # Timeout sangat ketat (10 detik) untuk PDF. Jika server terlalu lemot, lewati!
                             pdf_res = requests.get(proxy_pdf, timeout=10)
-                            total_bytes += len(pdf_res.content)
+                            
+                            if pdf_res.status_code != 200:
+                                pdf_res = requests.get(pdf_url, timeout=10, verify=False)
+                                
+                            if pdf_res.status_code == 200:
+                                total_bytes += len(pdf_res.content)
                             
                             # Verifikasi apakah benar-benar PDF (Magic number %PDF)
                             if 'application/pdf' in pdf_res.headers.get('Content-Type', '').lower() or pdf_res.content.startswith(b'%PDF'):
