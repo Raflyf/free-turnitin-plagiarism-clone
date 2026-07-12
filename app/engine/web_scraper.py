@@ -489,6 +489,8 @@ def scrape_all_candidates(urls, preloaded_corpus, progress_cb=None):
     requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
     
     import concurrent.futures
+    import time
+    start_time = time.time()
     with concurrent.futures.ThreadPoolExecutor(max_workers=40) as executor:
         futures = [executor.submit(scrape_url, u) for u in urls]
         total = len(futures)
@@ -499,7 +501,10 @@ def scrape_all_candidates(urls, preloaded_corpus, progress_cb=None):
                     corpus[url] = text
             except:
                 pass
+            
             if progress_cb:
-                progress_cb(i + 1, total)
+                elapsed = time.time() - start_time
+                speed = (i + 1) / elapsed if elapsed > 0 else 0
+                progress_cb(i + 1, total, speed)
                 
     return corpus
