@@ -17,10 +17,10 @@ def fetch_semantic_scholar(probe):
         short_probe = " ".join(probe.split()[:15])
         params = {
             "query": short_probe,
-            "limit": 3,
-            "fields": "url,title,abstract,openAccessPdf"
+            "limit": 5,
+            "fields": "title,abstract,url"
         }
-        res = requests.get(url, params=params, timeout=6)
+        res = requests.get(url, params=params, timeout=10)
         if res.status_code == 200:
             data = res.json()
             for paper in data.get('data', []):
@@ -47,7 +47,7 @@ def fetch_crossref(probe):
         params = {
             "query": short_probe,
             "select": "URL,title,abstract",
-            "rows": 3,
+            "rows": 15,
             "mailto": "research_turnitin_local@university.edu"
         }
         res = requests.get(url, params=params, timeout=6)
@@ -79,8 +79,15 @@ def fetch_ddgs(probe):
         ddgs = DDGS()
         short_probe = " ".join(probe.split()[:15])
         
+        import random
+        # Gunakan "jurnal OR repository" pada 50% probabilitas untuk memaksa DuckDuckGo menemukan repositori kampus
+        if random.random() > 0.5:
+            query = f'{short_probe} (jurnal OR repository OR skripsi)'
+        else:
+            query = f'{short_probe}'
+            
         # Ambil 15 hasil teratas untuk disortir
-        results = ddgs.text(f'{short_probe}', max_results=15)
+        results = ddgs.text(query, max_results=15)
         
         priority_urls = []
         normal_urls = []
@@ -208,8 +215,8 @@ def scrape_url(url):
                 pdf_text = ""
                 if pdf_links:
                     import fitz
-                    # Ambil maksimal 2 file PDF per halaman untuk efisiensi (Biasanya Bab 1-5 atau Full Text)
-                    for pdf_url in pdf_links[:2]:
+                    # Ambil maksimal 5 file PDF per halaman untuk efisiensi (Biasanya Bab 1-5 atau Full Text)
+                    for pdf_url in pdf_links[:5]:
                         try:
                             # Repositori kampus di Indonesia seringkali sangat lambat (bisa butuh 30-60 detik untuk 1 file skripsi)
                             pdf_res = requests.get(pdf_url, headers=headers, timeout=60, verify=False)

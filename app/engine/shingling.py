@@ -40,13 +40,13 @@ def calculate_similarity(doc_text, corpus, exclude_small=False):
     if not domain_corpus:
         return [], 0.0, []
 
-    total_doc_ngrams = set(get_ngrams(doc_text, n=5))
+    total_doc_ngrams = set(get_ngrams(doc_text, n=3))
     
     sources_report = {}
     
     # 2. Hitung Kemiripan per Sumber secara Matematis Akurat
     for domain, source_text in domain_corpus.items():
-        s_ngrams = set(get_ngrams(source_text, n=5))
+        s_ngrams = set(get_ngrams(source_text, n=3))
         overlap_ngrams = total_doc_ngrams.intersection(s_ngrams)
         
         if not overlap_ngrams:
@@ -56,11 +56,11 @@ def calculate_similarity(doc_text, corpus, exclude_small=False):
         clean_doc_words = [re.sub(r'[^\w\s]', '', w).lower() for w in doc_words]
         is_matched_source = [False] * len(doc_words)
         
-        for i in range(len(doc_words) - 5 + 1):
-            ngram = " ".join(clean_doc_words[i:i+5])
+        for i in range(len(doc_words) - 3 + 1):
+            ngram = " ".join(clean_doc_words[i:i+3])
             if ngram in overlap_ngrams:
-                for j in range(i, i+5):
-                    is_matched_source[j] = True
+                for j in range(3):
+                    is_matched_source[i+j] = True
                     
         matched_word_count = sum(is_matched_source)
         percentage = (matched_word_count / total_doc_words) * 100.0
