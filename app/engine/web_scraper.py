@@ -72,16 +72,35 @@ def fetch_crossref(probe):
     return urls_found, texts_found
 
 def fetch_ddgs(probe):
-    """Mencari website publik biasa via DuckDuckGo"""
+    """Mencari website publik biasa via DuckDuckGo, dengan Prioritas Situs Kampus/Jurnal"""
     urls_found = []
     try:
         from ddgs import DDGS
         ddgs = DDGS()
         short_probe = " ".join(probe.split()[:15])
-        results = ddgs.text(f'{short_probe}', max_results=6)
+        
+        # Ambil 15 hasil teratas untuk disortir
+        results = ddgs.text(f'{short_probe}', max_results=15)
+        
+        priority_urls = []
+        normal_urls = []
+        
         for res in list(results):
-            if 'href' in res and not res['href'].endswith('.pdf'): 
-                urls_found.append(res['href'])
+            if 'href' in res and not res['href'].endswith('.pdf'):
+                url = res['href'].lower()
+                # Deteksi domain prioritas tinggi ala Turnitin
+                if any(domain in url for domain in ['.ac.id', '.edu', 'jurnal', 'repository', 'eprints', '123dok', 'core.ac.uk', 'scribd', 'researchgate', 'digilib', 'scholar']):
+                    priority_urls.append(res['href'])
+                else:
+                    normal_urls.append(res['href'])
+                    
+        # Gabungkan: Ambil maksimal 5 situs akademik/prioritas, dan sisa slot diisi situs umum
+        final_urls = priority_urls[:5]
+        sisa_slot = 6 - len(final_urls)
+        if sisa_slot > 0:
+            final_urls.extend(normal_urls[:sisa_slot])
+            
+        urls_found.extend(final_urls)
         time.sleep(random.uniform(0.5, 1.5))
     except:
         pass
