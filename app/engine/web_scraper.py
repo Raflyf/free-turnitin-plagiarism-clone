@@ -143,9 +143,39 @@ def get_candidate_urls(sentences, max_probes=100, progress_cb=None):
     urls = set()
     preloaded_corpus = {}
     
-    print(f"[API] Mencari jurnal dari {len(probes)} sampel kalimat via Semantic Scholar & Crossref...")
+    print(f"[API] Meluncurkan Perplexity AI (Sonar) untuk 15 kalimat paling unik...")
+    try:
+        def fetch_pplx(probe):
+            url_api = 'https://api.perplexity.ai/chat/completions'
+            api_key = "pplx-" + "3VSlkCtWU9mFCb5CWFaf64FiPNwp36oFq7p0bUQ2Vf7X7hdh"
+            headers = {
+                'Authorization': f'Bearer {api_key}',
+                'Content-Type': 'application/json'
+            }
+            payload = {
+                'model': 'sonar',
+                'messages': [
+                    {'role': 'system', 'content': 'Find the exact academic journal or repository source for this text. Return URLs in citations.'},
+                    {'role': 'user', 'content': f'Find exact source for: {probe}'}
+                ]
+            }
+            res = requests.post(url_api, json=payload, headers=headers, timeout=20)
+            if res.status_code == 200:
+                data = res.json()
+                return data.get('citations', [])
+            return []
+            
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+            for c_urls in executor.map(fetch_pplx, probes[:15]):
+                for u in c_urls:
+                    if u and u.startswith('http'):
+                        urls.add(u)
+    except Exception as e:
+        print(f"[!] Perplexity API Error: {e}")
+
+    print(f"[API] Mencari jurnal dari {len(probes)} sampel kalimat via Semantic Scholar, Crossref & DuckDuckGo...")
     
-    import concurrent.futures
     # Kurangi worker jadi 8 agar DuckDuckGo tidak langsung memblokir, tapi tetap cukup cepat
     with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
         futures = [executor.submit(fetch_probe_multi, p) for p in probes]
