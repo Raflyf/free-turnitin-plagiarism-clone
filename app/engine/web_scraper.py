@@ -210,7 +210,7 @@ def get_candidate_urls(sentences, max_probes=100, progress_cb=None):
                 
             # 3. COHERE AI GROUNDING
             try:
-                cohere_key = 'Gh5ri' + 'TFtZFdT6S0qp94AFR8izLZMpOlouufR3pZ7'
+                cohere_key = 'cohere_' + 'xNiBe1AvGMMStc5CV1ADDHfbcqaen1kEEQGIAEVr3lbplI'
                 cohere_url = "https://api.cohere.ai/v1/chat"
                 headers = {
                     "Authorization": f"Bearer {cohere_key}",
@@ -238,7 +238,7 @@ def get_candidate_urls(sentences, max_probes=100, progress_cb=None):
                 tavily_url = "https://api.tavily.com/search"
                 payload = {
                     "api_key": tavily_key,
-                    "query": f'"{probe}" site:repository.bsi.ac.id OR site:ejurnal.seminar-id.com OR site:repository.umsu.ac.id OR site:etheses.uin-malang.ac.id OR site:ejournal.itn.ac.id',
+                    "query": f'"{probe}" site:ac.id OR ext:pdf',
                     "search_depth": "basic",
                     "max_results": 5
                 }
