@@ -184,7 +184,9 @@ def get_candidate_urls(sentences, max_probes=100, progress_cb=None):
                 
                 # Hanya jalankan jika kita punya cukup kapasitas key untuk index ini
                 if idx < (len(gemini_keys) * 15):
-                    key_index = (idx // 15) % len(gemini_keys)
+                    # Gunakan distribusi ROUND-ROBIN agar 3 thread paralel selalu menggunakan Key yang berbeda
+                    # Ini mencegah 1 Key dibombardir oleh 3 request di detik yang sama (mencegah error 429)
+                    key_index = idx % len(gemini_keys)
                     from google import genai
                     from google.genai import types
                     
