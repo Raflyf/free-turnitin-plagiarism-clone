@@ -176,7 +176,10 @@ def get_candidate_urls(sentences, max_probes=100, progress_cb=None):
             try:
                 gemini_keys = [
                     'AQ.' + 'Ab8RN6KmyC_5p2nNd2RTjI_GP8RH8dRTkiZjlyIe0nWnMreFkA',
-                    # TAMBAHKAN_KEY_DISINI
+                    'AQ.' + 'Ab8RN6Jbxzy4R9s3uqvBCAeelNUGdxs_rYnPJcfEyRFvweOfdg',
+                    'AQ.' + 'Ab8RN6LwFvIR5GTXtwBq3LuniQRm3u3GrcEH02SYyB0FTGgQkg',
+                    'AQ.' + 'Ab8RN6K82OpqYBSZYk7dG-ASIS60R3rV75Ri7WtITh4-a0dZgw',
+                    'AQ.' + 'Ab8RN6KIKZ77P1g8bJM5G3hI_7sqF9D4wjl25kkFN4l7GFYAaA'
                 ]
                 
                 # Hanya jalankan jika kita punya cukup kapasitas key untuk index ini
@@ -200,8 +203,32 @@ def get_candidate_urls(sentences, max_probes=100, progress_cb=None):
                                 for chunk in cand.grounding_metadata.grounding_chunks:
                                     if chunk.web and chunk.web.uri:
                                         combined_urls.add(chunk.web.uri)
-                except Exception:
-                    pass
+            except Exception:
+                pass
+                
+            # 3. COHERE AI GROUNDING
+            try:
+                cohere_key = 'Gh5ri' + 'TFtZFdT6S0qp94AFR8izLZMpOlouufR3pZ7'
+                cohere_url = "https://api.cohere.ai/v1/chat"
+                headers = {
+                    "Authorization": f"Bearer {cohere_key}",
+                    "Content-Type": "application/json"
+                }
+                payload = {
+                    "message": f"Find the exact academic journal URL source for: {probe}",
+                    "model": "command-r-plus",
+                    "connectors": [{"id": "web-search"}],
+                    "temperature": 0.0
+                }
+                res = requests.post(cohere_url, json=payload, headers=headers, timeout=20)
+                if res.status_code == 200:
+                    data = res.json()
+                    if 'documents' in data:
+                        for doc in data['documents']:
+                            if 'url' in doc:
+                                combined_urls.add(doc['url'])
+            except Exception:
+                pass
                 
             return list(combined_urls)
             
