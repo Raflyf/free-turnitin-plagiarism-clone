@@ -166,15 +166,11 @@ def fetch_ddgs(probe):
     try:
         from ddgs import DDGS
         ddgs = DDGS()
-        short_probe = " ".join(probe.split()[:15])
+        # KEMBALIKAN KE EXACT MATCH! (Ini kunci skor 14% di awal proyek)
+        # Batasi maksimal 30 kata agar DuckDuckGo tidak menolak kueri yang terlalu panjang
+        exact_probe = " ".join(probe.split()[:30])
+        query = f'"{exact_probe}"'
         
-        import random
-        # Gunakan filter tambahan pada 50% probabilitas untuk memaksa mesin menemukan repositori kampus dan Garuda Ristekdikti
-        if random.random() > 0.5:
-            query = f'{short_probe} (jurnal OR repository OR skripsi OR site:garuda.kemdikbud.go.id)'
-        else:
-            query = f'{short_probe}'
-            
         # Ambil 15 hasil teratas untuk disortir
         results = ddgs.text(query, max_results=15)
         
