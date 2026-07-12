@@ -114,8 +114,8 @@ def get_candidate_urls(sentences, max_probes=100, progress_cb=None):
     print(f"[API] Mencari jurnal dari {len(probes)} sampel kalimat via Semantic Scholar & Crossref...")
     
     import concurrent.futures
-    # Kurangi worker jadi 5 agar DuckDuckGo tidak langsung memblokir karena spam request
-    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+    # Kurangi worker jadi 8 agar DuckDuckGo tidak langsung memblokir, tapi tetap cukup cepat
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
         futures = [executor.submit(fetch_probe_multi, p) for p in probes]
         total = len(futures)
         for i, future in enumerate(concurrent.futures.as_completed(futures)):
