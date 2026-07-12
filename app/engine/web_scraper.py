@@ -143,7 +143,7 @@ def get_candidate_urls(sentences, max_probes=100, progress_cb=None):
     urls = set()
     preloaded_corpus = {}
     
-    print(f"[API] Meluncurkan Perplexity AI (Sonar) untuk 15 kalimat paling unik...")
+    print(f"[API] Meluncurkan Perplexity AI (Sonar) untuk 50 kalimat paling unik...")
     try:
         def fetch_pplx(probe):
             url_api = 'https://api.perplexity.ai/chat/completions'
@@ -166,8 +166,8 @@ def get_candidate_urls(sentences, max_probes=100, progress_cb=None):
             return []
             
         import concurrent.futures
-        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
-            for c_urls in executor.map(fetch_pplx, probes[:15]):
+        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+            for c_urls in executor.map(fetch_pplx, probes[:50]):
                 for u in c_urls:
                     if u and u.startswith('http'):
                         urls.add(u)
