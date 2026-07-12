@@ -79,11 +79,7 @@ def calculate_similarity(doc_text, corpus, exclude_small=False):
                         break
                     
         matched_word_count = sum(is_matched_source)
-        
-        # [Kompensasi Database Offline Turnitin]
-        # Turnitin memiliki repositori tertutup. Rata-rata Google Search kehilangan 30-50% coverage.
-        # Kita gunakan multiplier 1.5x untuk mensimulasikan skor Turnitin asli.
-        percentage = min((matched_word_count / total_doc_words) * 100.0 * 1.5, 100.0)
+        percentage = (matched_word_count / total_doc_words) * 100.0
         
         if exclude_small and percentage < 1.0:
             continue
@@ -167,8 +163,6 @@ def calculate_similarity(doc_text, corpus, exclude_small=False):
 
     # Total Kata Plagiat Global
     total_plagiarized_words_global = sum(is_matched_global)
-    
-    # [Kompensasi Database Offline Turnitin]
-    total_similarity = min(float((total_plagiarized_words_global / total_doc_words) * 100.0 * 1.5), 100.0)
+    total_similarity = float((total_plagiarized_words_global / total_doc_words) * 100.0)
     
     return sorted_sources, total_similarity, plagiarized_sentences_data
