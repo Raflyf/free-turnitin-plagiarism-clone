@@ -42,11 +42,28 @@ def extract_text_from_pdf(filepath, exclude_quotes=True, exclude_biblio=True):
 def clean_text(text, exclude_quotes=True, exclude_biblio=True):
     text = re.sub(r'\s+', ' ', text).strip()
     
+    # [1] Exclude Front Matter (Cover, Pengesahan, Daftar Isi) - Turnitin Behavior
+    # Mencari kemunculan pertama BAB I, BAB 1, atau PENDAHULUAN (dengan batas wajar di awal)
+    first_bab_idx = -1
+    upper_text = text.upper()
+    
+    # Cari indeks terkecil dari BAB 1, BAB I, atau PENDAHULUAN
+    idx_1 = upper_text.find('BAB I ')
+    idx_2 = upper_text.find('BAB 1 ')
+    idx_3 = upper_text.find('PENDAHULUAN')
+    
+    valid_indices = [idx for idx in [idx_1, idx_2, idx_3] if idx != -1 and idx < len(text) * 0.3]
+    if valid_indices:
+        first_bab_idx = min(valid_indices)
+        text = text[first_bab_idx:]
+    
+    # [2] Exclude Bibliography
     if exclude_biblio:
         last_idx = max(text.upper().rfind('DAFTAR PUSTAKA'), text.upper().rfind('REFERENCES'))
         if last_idx > len(text) * 0.5:
             text = text[:last_idx]
     
+    # [3] Exclude Quotes
     if exclude_quotes:
         text = re.sub(r'["“”].*?["“”]', '', text)
     
