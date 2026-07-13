@@ -294,21 +294,36 @@ def fetch_ddgs(probe):
     return urls_found, []
 
 def fetch_probe_multi(probe):
-    """Mencari ke semua mesin secara serentak"""
+    """Mencari ke semua mesin secara serentak dengan free API fallbacks"""
+    # Import modul baru
+    from .free_api_fallbacks import search_with_fallbacks
+    from .indonesian_repos import search_all_indonesian_repos
+    
+    # 1. Try academic APIs first (free, unlimited)
     u_ss, t_ss = fetch_semantic_scholar(probe)
     u_cr, t_cr = fetch_crossref(probe)
     u_oa, t_oa = fetch_openalex(probe)
+    
+    # 2. Try paid APIs (may fail if credit exhausted)
     u_gs, _ = fetch_google_scholar(probe)
     u_gw, _ = fetch_google_web(probe)
     u_gr, _ = fetch_garuda(probe)
+    
+    # 3. Try DuckDuckGo (free, unlimited)
     u_dd, _ = fetch_ddgs(probe)
     
+    # 4. NEW: Direct search Indonesian repositories (no API limits!)
+    u_repo, t_repo = search_all_indonesian_repos(probe, max_repos=5, results_per_repo=2)
+    
+    # 5. NEW: Free API fallbacks with caching (jika paid APIs gagal)
+    u_fallback, t_fallback = search_with_fallbacks(probe, use_cache=True)
+    
     # Gabungkan URL yang sudah ada abstraknya
-    api_urls = u_ss + u_cr + u_oa
-    api_texts = t_ss + t_cr + t_oa
+    api_urls = u_ss + u_cr + u_oa + u_repo
+    api_texts = t_ss + t_cr + t_oa + t_repo
     
     # URL biasa yang perlu discrape kontennya
-    normal_urls = u_gs + u_gw + u_gr + u_dd
+    normal_urls = u_gs + u_gw + u_gr + u_dd + u_fallback
     
     return api_urls, api_texts, normal_urls
 
