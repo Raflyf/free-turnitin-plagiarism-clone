@@ -245,6 +245,9 @@ def calculate_similarity(doc_text, corpus, exclude_small=False, use_semantic=Fal
             
             print(f"[!] Semantic check found {len(semantic_results)} potential paraphrase matches")
             
+            # Menyimpan mapping (sent_start, sent_end) ke source URL agar bisa di-filter nanti
+            semantic_matches_temp = []
+            
             # Proses hasil semantic similarity
             for unmatched_idx, matches in semantic_results.items():
                 if matches:
@@ -272,17 +275,18 @@ def calculate_similarity(doc_text, corpus, exclude_small=False, use_semantic=Fal
                             if not is_matched_global[word_idx]:
                                 newly_detected_words += 1
                                 
-                    temp_percentage = (newly_detected_words / total_doc_words) * 100.0
+                    # KITA TIDAK LAGI MEMBUANG PER-KALIMAT.
+                    # Kumpulkan dulu semuanya ke sumber URL tersebut.
                     
-                    if exclude_small and temp_percentage < 1.0:
-                        continue # Skip match kecil jika filter aktif (LOG-07)
-                        
-                    # Commit perubahan jika lolos filter
-                    for word_idx in range(sent_start, sent_end):
-                        if word_idx < len(is_matched_global):
-                            is_matched_global[word_idx] = True
-                            
-                    semantic_plagiarized_words += newly_detected_words
+                    # Update is_matched_global sementara (nanti jika sumbernya <1% akan kita bersihkan)
+                    # KITA TIDAK LANGSUNG UPDATE is_matched_global di sini!
+                    # Simpan dulu koordinat match-nya.
+                    semantic_matches_temp.append({
+                        'sent_start': sent_start,
+                        'sent_end': sent_end,
+                        'source_url': source_url,
+                        'newly_detected_words': newly_detected_words
+                    })
                     
                     # Update sources_report dengan info semantic
                     # PENTING: Hanya hitung kata yang BARU terdeteksi (newly_detected_words), bukan seluruh kalimat
@@ -304,14 +308,46 @@ def calculate_similarity(doc_text, corpus, exclude_small=False, use_semantic=Fal
                     ) * 100.0
                     sources_report[source_url]['sort_score'] = sources_report[source_url]['percentage']
             
-            # Recalculate total similarity dengan semantic results
+            # === FINAL FILTERING (Mencegah Skor Terlalu Tinggi karena Noise) ===
+            # Jika exclude_small aktif, buang sumber yang TOTAL kontribusinya < 1.0%
+            dropped_source_urls = set()
+            if exclude_small:
+                filtered_sources_report = {}
+                
+                for url, s_data in sources_report.items():
+                    if s_data['percentage'] >= 1.0:
+                        filtered_sources_report[url] = s_data
+                    else:
+                        dropped_source_urls.add(url)
+                        
+                sources_report = filtered_sources_report
+                
+                # Filter array plagiarized_sentences_data dari sumber yang dibuang
+                if dropped_source_urls:
+                    surviving_sentences = []
+                    for sent_data in plagiarized_sentences_data:
+                        if sent_data.get('matched_source') not in dropped_source_urls:
+                            surviving_sentences.append(sent_data)
+                    plagiarized_sentences_data = surviving_sentences
+
+            # Update is_matched_global hanya dari sumber semantic yang LOLOS filter
+            for match_data in semantic_matches_temp:
+                if match_data['source_url'] not in dropped_source_urls:
+                    semantic_plagiarized_words += match_data['newly_detected_words']
+                    for word_idx in range(match_data['sent_start'], match_data['sent_end']):
+                        if word_idx < len(is_matched_global):
+                            is_matched_global[word_idx] = True
+
+            # Recalculate total similarity dengan semantic results yang sudah bersih dari noise
             total_plagiarized_words_global = sum(is_matched_global)
-            
+                
             # Sort ulang sources dengan semantic results
             sorted_sources = sorted(list(sources_report.values()), key=lambda x: x['sort_score'], reverse=True)
             top_sources = sorted_sources[:20]
     
-    total_similarity = float((total_plagiarized_words_global / total_doc_words) * 100.0)
+    # Hitung ulang total similarity secara global
+    # (Bila kita benar-benar drop words, sum(is_matched_global) akan turun)
+    total_similarity = float((sum(is_matched_global) / total_doc_words) * 100.0)
     
     print(f"\n[!] ===== DETECTION SUMMARY =====")
     print(f"[!] N-Gram similarity: {ngram_similarity:.2f}%")
