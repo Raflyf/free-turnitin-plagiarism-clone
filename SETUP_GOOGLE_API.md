@@ -2,7 +2,7 @@
 
 ## 🎯 Kenapa Google Custom Search API?
 
-- ✅ **10,000 queries/day GRATIS** (cukup untuk 200+ dokumen/hari)
+- ✅ **100 queries/day GRATIS** (setelah itu berbayar $5 per 1,000 queries, limit maks 10k/day dengan billing)
 - ✅ **Reliable** (official Google API, tidak seperti scraping yang mudah diblock)
 - ✅ **Fast** (response time < 1 detik)
 - ✅ **Coverage luas** (akses ke seluruh index Google)
