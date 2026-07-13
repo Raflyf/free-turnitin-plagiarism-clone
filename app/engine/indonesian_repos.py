@@ -64,11 +64,17 @@ OJS_SEARCH_PATTERNS = [
     "/search",
 ]
 
+# Global blacklist untuk server kampus yang sedang down (agar tidak di-query berulang kali)
+DEAD_REPOSITORIES = set()
+
 def search_repository_direct(repo_url, query, max_results=5):
     """
     Search langsung ke repository tanpa API.
     Mendeteksi platform (EPrints, DSpace, OJS) dan menyesuaikan strategi.
     """
+    if repo_url in DEAD_REPOSITORIES:
+        return [], []
+        
     urls_found = []
     texts_found = []
     
@@ -87,7 +93,11 @@ def search_repository_direct(repo_url, query, max_results=5):
             urls_found = google_site_search_fallback(repo_url, query, max_results)
             
     except Exception as e:
-        print(f"[!] Error searching {repo_url}: {e}")
+        if "Timeout" in str(e) or "Max retries exceeded" in str(e):
+            print(f"[!] {repo_url} mati/timeout. Menambahkan ke Blacklist...")
+            DEAD_REPOSITORIES.add(repo_url)
+        else:
+            print(f"[!] Error searching {repo_url}: {e}")
     
     return urls_found, texts_found
 
@@ -121,9 +131,8 @@ def search_eprints(repo_url, query, max_results=5):
     urls_found = []
     texts_found = []
     
-    try:
-        # EPrints advanced search URL
-        search_url = f"{repo_url}/cgi/search/simple"
+    # EPrints advanced search URL
+    search_url = f"{repo_url}/cgi/search/simple"
         params = {
             "q": query,
             "_order": "bytitle",
@@ -152,9 +161,6 @@ def search_eprints(repo_url, query, max_results=5):
                         urls_found.append(url)
                         texts_found.append(abstract[:500])
                         
-    except Exception as e:
-        print(f"[!] EPrints search failed for {repo_url}: {e}")
-    
     return urls_found, texts_found
 
 def search_dspace(repo_url, query, max_results=5):
@@ -162,9 +168,8 @@ def search_dspace(repo_url, query, max_results=5):
     urls_found = []
     texts_found = []
     
-    try:
-        # DSpace simple search
-        search_url = f"{repo_url}/simple-search"
+    # DSpace simple search
+    search_url = f"{repo_url}/simple-search"
         params = {
             "query": query,
             "sort_by": "score",
@@ -191,9 +196,6 @@ def search_dspace(repo_url, query, max_results=5):
                         urls_found.append(url)
                         texts_found.append(abstract[:500])
                         
-    except Exception as e:
-        print(f"[!] DSpace search failed for {repo_url}: {e}")
-    
     return urls_found, texts_found
 
 def search_ojs(repo_url, query, max_results=5):
@@ -201,9 +203,8 @@ def search_ojs(repo_url, query, max_results=5):
     urls_found = []
     texts_found = []
     
-    try:
-        # OJS search endpoint (varies by version)
-        for pattern in OJS_SEARCH_PATTERNS:
+    # OJS search endpoint (varies by version)
+    for pattern in OJS_SEARCH_PATTERNS:
             try:
                 search_url = repo_url + pattern
                 params = {"query": query}
@@ -231,12 +232,11 @@ def search_ojs(repo_url, query, max_results=5):
                     if urls_found:
                         break  # Found results, no need to try other patterns
                         
-            except:
+            except requests.exceptions.Timeout:
+                raise # Lemparkan Timeout agar masuk blacklist
+            except Exception:
                 continue
                 
-    except Exception as e:
-        print(f"[!] OJS search failed for {repo_url}: {e}")
-    
     return urls_found, texts_found
 
 def google_site_search_fallback(repo_url, query, max_results=5):
