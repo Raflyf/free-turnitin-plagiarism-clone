@@ -69,6 +69,7 @@ def generate_report_pdf(original_pdf_path, output_pdf_path, data):
             
         # Simpan semua kotak warna di halaman ini untuk mencegah overlap
         highlighted_rects = []
+        blocked_overlaps_count = 0
         
         def is_overlapping(rect):
             for r in highlighted_rects:
@@ -98,7 +99,7 @@ def generate_report_pdf(original_pdf_path, output_pdf_path, data):
             if text_instances:
                 for inst in text_instances:
                     if is_overlapping(inst.rect):
-                        print(f"[Anti-Overlap] Memblokir penumpukan warna pada frasa: {text[:30]}...")
+                        blocked_overlaps_count += 1
                         continue
                     highlighted_rects.append(inst.rect)
                     
@@ -123,7 +124,7 @@ def generate_report_pdf(original_pdf_path, output_pdf_path, data):
                     insts = page.search_for(chunk, quads=True)
                     for inst in insts:
                         if is_overlapping(inst.rect):
-                            print(f"[Anti-Overlap] Memblokir penumpukan warna pada potongan: {chunk[:30]}...")
+                            blocked_overlaps_count += 1
                             continue
                         highlighted_rects.append(inst.rect)
                         
@@ -139,7 +140,7 @@ def generate_report_pdf(original_pdf_path, output_pdf_path, data):
                 insts = page.search_for(chunk, quads=True)
                 for inst in insts:
                     if is_overlapping(inst.rect):
-                        print(f"[Anti-Overlap] Memblokir penumpukan warna pada frasa pendek: {chunk[:30]}...")
+                        blocked_overlaps_count += 1
                         continue
                     highlighted_rects.append(inst.rect)
                     
@@ -152,6 +153,9 @@ def generate_report_pdf(original_pdf_path, output_pdf_path, data):
                         
             if first_rect:
                 draw_badge(page, first_rect, source_id, color)
+                
+        if blocked_overlaps_count > 0:
+            print(f"[Anti-Overlap] Blokir {blocked_overlaps_count} penumpukan warna di Halaman {page_num + 1}")
 
     # --- STEP 2: Buat Halaman "ORIGINALITY REPORT" di akhir ---
     report_page = doc.new_page(-1, width=595, height=842) # Ukuran A4 standar
