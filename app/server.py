@@ -3,6 +3,11 @@ import time
 import math
 import uuid
 import secrets
+from dotenv import load_dotenv
+
+# Load API keys from .env file FIRST before anything else uses them
+load_dotenv()
+
 from flask import Flask, render_template, request, jsonify, send_file, session
 from werkzeug.utils import secure_filename
 import threading
