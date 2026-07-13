@@ -1,4 +1,9 @@
-﻿.venv/
+.venv/
 __pycache__/
 uploads/
 reports/
+
+# Konfigurasi rahasia
+.env
+.env.local
+*.env

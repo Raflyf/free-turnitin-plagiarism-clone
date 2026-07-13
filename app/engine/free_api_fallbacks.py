@@ -206,16 +206,15 @@ def search_with_fallbacks(query, use_cache=True):
     short_query = ' '.join(query.split()[:20])
     
     # Google Custom Search API credentials
-    google_api_keys = [
-        'AIzaSyAYHWCzB4cngtXwNG8VX5gl-PejHSj2DdY',  # Key Utama Anda
-        'AIzaSyDU_W1ABFJqxob_PdsGfMVHKLPFLgEd0Lk',  # Key Backup Akun Kedua Anda
-    ]
-    cx_id = '71bc58731f30a4f5d'
+    import os
+    google_env = os.environ.get('GOOGLE_API_KEYS', '')
+    google_api_keys = google_env.split(',') if google_env else []
+    cx_id = os.environ.get('GOOGLE_CX_ID', '')
     
     all_urls = []
     all_texts = []
     
-    is_configured = cx_id != 'YOUR_CX_ID_HERE'
+    is_configured = bool(google_api_keys) and bool(cx_id)
     
     if is_configured:
         # Try each API key with load balancing

@@ -1,9 +1,42 @@
 import re
 from .semantic_similarity import batch_semantic_check
 
-def get_sentences(text):
-    sentences = re.split(r'(?<=[.!?]) +', text)
-    return [s.strip() for s in sentences if len(s.split()) >= 3]
+def get_sentences(text, filter_short=False):
+    sentences = re.split(r'(?<=[.!?])\s+', text)
+    if filter_short:
+        return [s.strip() for s in sentences if len(s.split()) >= 3]
+    return [s.strip() for s in sentences if s.strip()]
+
+def build_sentence_word_spans(doc_text, max_words=40):
+    """
+    LOG-02: Memetakan kalimat ke indeks kata (word offsets) dengan presisi.
+    Jika kalimat tidak memiliki titik dan sangat panjang, akan dipecah otomatis 
+    agar Semantic AI tidak terkena limit token.
+    Returns: list of (chunk_text, start_idx, end_idx)
+    """
+    doc_words = doc_text.split()
+    spans = []
+    
+    sentences_raw = re.split(r'(?<=[.!?])\s+', doc_text)
+    current_word_idx = 0
+    
+    for raw_sent in sentences_raw:
+        raw_sent = raw_sent.strip()
+        if not raw_sent: continue
+        
+        words_in_sent = raw_sent.split()
+        for i in range(0, len(words_in_sent), max_words):
+            chunk_words = words_in_sent[i:i+max_words]
+            chunk_len = len(chunk_words)
+            chunk_text = ' '.join(chunk_words)
+            
+            start_idx = current_word_idx
+            end_idx = current_word_idx + chunk_len
+            
+            spans.append((chunk_text, start_idx, end_idx))
+            current_word_idx += chunk_len
+            
+    return spans
 
 def get_ngrams(text, n=5):
     """
@@ -20,7 +53,7 @@ def get_ngrams(text, n=5):
 def get_shingles(text, n=5):
     return set(get_ngrams(text, n))
 
-def calculate_similarity(doc_text, corpus, exclude_small=False, use_semantic=False, semantic_threshold=0.75):
+def calculate_similarity(doc_text, corpus, exclude_small=False, use_semantic=False, semantic_threshold=0.88):
     """
     Algoritma Turnitin Asli (Rabin-Karp / N-Gram Exact Match) + Semantic Similarity.
     
@@ -34,8 +67,8 @@ def calculate_similarity(doc_text, corpus, exclude_small=False, use_semantic=Fal
         use_semantic: Aktifkan layer semantic similarity untuk deteksi parafrasa
         semantic_threshold: Minimum similarity score (0-1) untuk semantic matching
     """
-    doc_sentences = get_sentences(doc_text)
-    if not doc_sentences:
+    doc_spans = build_sentence_word_spans(doc_text)
+    if not doc_spans:
         return [], 0.0, []
 
     doc_words = doc_text.split()
@@ -43,16 +76,7 @@ def calculate_similarity(doc_text, corpus, exclude_small=False, use_semantic=Fal
     if total_doc_words == 0:
         return [], 0.0, []
 
-    # 1. Pra-pemrosesan Corpus (Deduplikasi Domain)
-    domain_corpus = {}
-    for url, source_text in corpus.items():
-        base_domain = url.split('//')[-1].split('/')[0] if '//' in url else url
-        if base_domain not in domain_corpus:
-            domain_corpus[base_domain] = source_text
-        else:
-            domain_corpus[base_domain] += " " + source_text
-
-    if not domain_corpus:
+    if not corpus:
         return [], 0.0, []
 
     total_doc_ngrams = set(get_ngrams(doc_text, n=5))
@@ -60,7 +84,7 @@ def calculate_similarity(doc_text, corpus, exclude_small=False, use_semantic=Fal
     sources_report = {}
     
     # 2. Hitung Kemiripan per Sumber secara Matematis Akurat
-    for domain, source_text in domain_corpus.items():
+    for url, source_text in corpus.items():
         s_ngrams = set(get_ngrams(source_text, n=5))
         overlap_ngrams = total_doc_ngrams.intersection(s_ngrams)
         
@@ -94,10 +118,10 @@ def calculate_similarity(doc_text, corpus, exclude_small=False, use_semantic=Fal
             continue
             
         if percentage > 0:
-            sources_report[domain] = {
+            sources_report[url] = {
                 'percentage': float(percentage),
                 'matched_words': int(matched_word_count),
-                'url': domain,
+                'url': url,
                 'sort_score': float(percentage),
                 'overlap_ngrams': overlap_ngrams # Simpan untuk agregasi global nanti
             }
@@ -109,7 +133,7 @@ def calculate_similarity(doc_text, corpus, exclude_small=False, use_semantic=Fal
     # 3. Agregasi Keseluruhan (Overall Similarity Index)
     # Turnitin menghitung indeks total dari GABUNGAN semua kata yang plagiat dari SUMBER MANAPUN.
     global_overlap_ngrams = set()
-    for s in top_sources:
+    for s in sorted_sources:
         global_overlap_ngrams.update(s['overlap_ngrams'])
         
     plagiarized_sentences_data = []
@@ -180,22 +204,16 @@ def calculate_similarity(doc_text, corpus, exclude_small=False, use_semantic=Fal
     
     if use_semantic and corpus:
         print("\n[!] ===== STARTING SEMANTIC SIMILARITY CHECK =====")
-        print(f"[!] Threshold: {semantic_threshold}, Total sentences: {len(doc_sentences)}")
+        print(f"[!] Threshold: {semantic_threshold}, Total sentences: {len(doc_spans)}")
         
         # Identifikasi kalimat yang TIDAK terdeteksi oleh N-Gram
         unmatched_sentences = []
         unmatched_indices = []
         
         sentence_word_positions = []  # Track posisi kata untuk setiap kalimat
-        current_pos = 0
         
-        for sent_idx, sentence in enumerate(doc_sentences):
-            sent_words = sentence.split()
-            sent_word_count = len(sent_words)
-            
-            # Cek apakah kalimat ini sebagian besar belum terdeteksi oleh N-Gram
-            sent_start = current_pos
-            sent_end = current_pos + sent_word_count
+        for sent_idx, (sentence, sent_start, sent_end) in enumerate(doc_spans):
+            sent_word_count = sent_end - sent_start
             
             if sent_end > len(is_matched_global):
                 sent_end = len(is_matched_global)
@@ -209,8 +227,6 @@ def calculate_similarity(doc_text, corpus, exclude_small=False, use_semantic=Fal
             if match_ratio < 0.3 and sent_word_count >= 5:
                 unmatched_sentences.append(sentence)
                 unmatched_indices.append(sent_idx)
-            
-            current_pos += sent_word_count
         
         print(f"[!] Found {len(unmatched_sentences)} unmatched sentences for semantic check")
         
@@ -218,7 +234,7 @@ def calculate_similarity(doc_text, corpus, exclude_small=False, use_semantic=Fal
             # Siapkan corpus dalam format yang diperlukan semantic_similarity
             corpus_by_sentence = {}
             for url, source_text in corpus.items():
-                corpus_by_sentence[url] = get_sentences(source_text)
+                corpus_by_sentence[url] = get_sentences(source_text, filter_short=True)
             
             # Jalankan batch semantic check
             semantic_results = batch_semantic_check(
@@ -245,18 +261,27 @@ def calculate_similarity(doc_text, corpus, exclude_small=False, use_semantic=Fal
                         'matched_text': best_match['matched_text']
                     })
                     
-                    # Update global match status untuk kalimat ini
-                    # PENTING: Hanya hitung kata yang BELUM terdeteksi N-Gram (no double counting)
+                    # LOG-07: Terapkan exclude_small pada hasil semantic
+                    source_url = best_match['source_url']
+                    
                     sent_start, sent_end = sentence_word_positions[actual_sent_idx]
                     newly_detected_words = 0
                     
                     for word_idx in range(sent_start, sent_end):
                         if word_idx < len(is_matched_global):
-                            if not is_matched_global[word_idx]:  # Hanya hitung yang BELUM terdeteksi
+                            if not is_matched_global[word_idx]:
                                 newly_detected_words += 1
-                                is_matched_global[word_idx] = True
+                                
+                    temp_percentage = (newly_detected_words / total_doc_words) * 100.0
                     
-                    # Hitung HANYA kata tambahan yang terdeteksi oleh semantic (no double counting)
+                    if exclude_small and temp_percentage < 1.0:
+                        continue # Skip match kecil jika filter aktif (LOG-07)
+                        
+                    # Commit perubahan jika lolos filter
+                    for word_idx in range(sent_start, sent_end):
+                        if word_idx < len(is_matched_global):
+                            is_matched_global[word_idx] = True
+                            
                     semantic_plagiarized_words += newly_detected_words
                     
                     # Update sources_report dengan info semantic

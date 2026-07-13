@@ -5,7 +5,7 @@ Modul ini adalah _tools_ pengecek plagiarisme mandiri tingkat lanjut (Clone Turn
 ## 🚀 Latest Updates (v2.0)
 
 ### ✨ New Features
-- **Semantic Similarity Layer**: Deteksi parafrasa menggunakan sentence-transformers (model 'all-MiniLM-L6-v2')
+- **Semantic Similarity Layer**: Deteksi parafrasa tingkat lanjut menggunakan sentence-transformers (model 'paraphrase-multilingual-MiniLM-L12-v2') dengan dukungan bahasa Indonesia yang akurat.
 - **BSI Repository Priority**: Prioritas tinggi untuk repository.bsi.ac.id dan kampus Indonesia lainnya
 - **Session-Based Security**: File access dilindungi dengan ownership validation
 - **Auto Encoding Detection**: Support untuk berbagai encoding file (UTF-8, Latin-1, CP1252, etc.)
@@ -38,7 +38,7 @@ Sistem menggunakan ekosistem *Hybrid* skala besar dengan **2-Layer Detection**:
 4. **Fuzzy Search & Strict Local N-Gram:** Menembakkan kueri secara *Fuzzy (BM25)* ke mesin pencari agar toleran terhadap *typo/OCR error* teks PDF, kemudian memproses silang seluruh teks sumber yang berhasil diunduh menggunakan mesin **N-Gram Shingling Exact Match** secara lokal.
 
 ### Layer 2: Semantic Similarity (NEW!)
-5. **Paraphrase Detection:** Kalimat yang TIDAK terdeteksi oleh N-Gram (< 30% match) akan dicek menggunakan **sentence-transformers** untuk mendeteksi parafrasa dengan threshold 0.75
+5. **Paraphrase Detection:** Kalimat yang TIDAK terdeteksi oleh N-Gram (< 30% match) akan dicek menggunakan **sentence-transformers** untuk mendeteksi parafrasa dengan threshold bawaan 0.88
 6. **No Double Counting:** Semantic layer hanya menambah kata yang BELUM terdeteksi N-Gram, menjamin akurasi skor
 
 ### Repository Priority System
@@ -175,6 +175,11 @@ Each source shows:
 - [ ] Custom model fine-tuning untuk bahasa Indonesia
 - [ ] Multi-language support
 - [ ] Batch processing untuk multiple files
+
+## 📋 Audit Kode
+
+- Audit awal: **[docs/AUDIT_LENGKAP.md](docs/AUDIT_LENGKAP.md)** — Juli 2026
+- Audit ulang (pasca-perbaikan): **[docs/AUDIT_ULANG.md](docs/AUDIT_ULANG.md)** — Juli 2026
 
 ## 📝 Changelog
 

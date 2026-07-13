@@ -219,26 +219,33 @@ if __name__ == '__main__':
         os.system(f"taskkill /F /PID {os.getpid()} >nul 2>&1")
         os._exit(0)
     
+
     signal.signal(signal.SIGINT, on_ctrl_c)
     
     print("\n==================================================")
     print(f"[!] Akses Lokal (IP)   : http://{local_ip}:5001")
     
     # Jalankan Ngrok di thread terpisah agar crash-nya tidak mematikan Flask
-    def start_ngrok():
-        try:
-            from pyngrok import ngrok
-            import logging
-            # Sembunyikan pesan warning ngrok agar tidak memenuhi terminal
-            logging.getLogger("pyngrok").setLevel(logging.CRITICAL)
-            ngrok.kill()
-            public_url = ngrok.connect(5001)
-            print(f"[!] Akses Publik Ngrok : {public_url.public_url}")
-        except Exception as e:
-            print(f"[!] Ngrok tidak tersedia: {e}")
-    
-    ngrok_thread = threading.Thread(target=start_ngrok, daemon=True)
-    ngrok_thread.start()
+    # SEC-03: Ngrok kini opsional via environment variable
+    if os.environ.get('USE_NGROK', 'false').lower() == 'true':
+        def start_ngrok():
+            try:
+                from pyngrok import ngrok
+                import logging
+                # Sembunyikan pesan warning ngrok agar tidak memenuhi terminal
+                logging.getLogger("pyngrok").setLevel(logging.CRITICAL)
+                ngrok.kill()
+                public_url = ngrok.connect(5001)
+                print(f"[!] Akses Publik Ngrok : {public_url.public_url}")
+            except Exception as e:
+                print(f"[!] Ngrok tidak tersedia: {e}")
+        
+        ngrok_thread = threading.Thread(target=start_ngrok, daemon=True)
+        ngrok_thread.start()
+    else:
+        print("[!] Akses Publik Ngrok : DINONAKTIFKAN (Gunakan USE_NGROK=true untuk mengaktifkan)")
+        
     print("==================================================\n")
     
-    app.run(host='0.0.0.0', port=5001, debug=True, use_reloader=False)
+    # SEC-02: Matikan debug=True untuk mencegah remote code execution via Werkzeug
+    app.run(host='0.0.0.0', port=5001, debug=False, use_reloader=False)

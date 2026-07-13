@@ -43,27 +43,15 @@
 9. **PENTING:** Pastikan toggle **"Search the entire web"** = **ON**
    - Jika OFF, Anda hanya bisa search 10 situs yang Anda tentukan!
 
-### Step 3: Masukkan Credentials ke Code
+### Step 3: Masukkan Credentials ke File .env
 
-Edit file `plagiarism_checker/app/engine/free_api_fallbacks.py`:
+1. Buka folder `plagiarism_checker/`
+2. Ubah nama file `.env.example` menjadi `.env`
+3. Edit isi file `.env`:
 
-```python
-# Ganti bagian ini:
-google_api_keys = [
-    'AIzaSyDXq3lXq3lXq3lXq3lXq3lXq3lXq3lXq3l',  # GANTI dengan API Key Anda
-]
-
-cx_id = 'YOUR_CX_ID_HERE'  # GANTI dengan CX ID Anda
-```
-
-Menjadi:
-
-```python
-google_api_keys = [
-    'AIzaSyAbc123....',  # API Key dari Step 1
-]
-
-cx_id = '0123456789abcdef:0123456789'  # CX ID dari Step 2
+```env
+GOOGLE_API_KEYS=API_KEY_ANDA_DISINI
+GOOGLE_CX_ID=CX_ID_ANDA_DISINI
 ```
 
 ### Step 4: Test

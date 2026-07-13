@@ -33,8 +33,8 @@ def fetch_semantic_scholar(probe):
                     urls_found.append(p_url)
                     texts_found.append(combined_text)
         time.sleep(1) # Hormati rate-limit 100 per 5 menit
-    except:
-        pass
+    except Exception as e:
+        print(f"[!] Warning: API/Scraper error -> {e}")
     return urls_found, texts_found
 
 def fetch_crossref(probe):
@@ -67,8 +67,8 @@ def fetch_crossref(probe):
                 if p_url and len(combined_text) > 50:
                     urls_found.append(p_url)
                     texts_found.append(combined_text)
-    except:
-        pass
+    except Exception as e:
+        print(f"[!] Warning: API/Scraper error -> {e}")
     return urls_found, texts_found
 
 def fetch_openalex(probe):
@@ -90,12 +90,21 @@ def fetch_openalex(probe):
                 p_url = work.get('doi') or work.get('id')
                 abstract = work.get('abstract_inverted_index')
                 title = work.get('title') or ""
-                # OpenAlex stores abstract as inverted index, hard to reconstruct easily without processing.
-                # So we just rely on URL discovery for now.
                 if p_url:
                     urls_found.append(p_url)
-    except:
-        pass
+                    abstract_text = ""
+                    if abstract:
+                        word_index = []
+                        for word, positions in abstract.items():
+                            for pos in positions:
+                                word_index.append((pos, word))
+                        word_index.sort(key=lambda x: x[0])
+                        abstract_text = " ".join([w[1] for w in word_index])
+                    
+                    combined_text = title + " " + abstract_text
+                    texts_found.append(combined_text.strip())
+    except Exception as e:
+        print(f"[!] OpenAlex API error: {e}")
     return urls_found, texts_found
 
 def fetch_google_scholar(probe):
@@ -107,7 +116,9 @@ def fetch_google_scholar(probe):
         query = urllib.parse.quote(short_probe)
         target_url = f"https://scholar.google.com/scholar?q={query}"
         
-        scrapingbee_key = "8IP8RZJY253EBD63MNWTQYSVPAAOKCOJ0TTZ3D6A8JMEXD2W6OSV5M75COHT4P0KSRG6FMAAQ41GG7U9"
+        import os
+        scrapingbee_key = os.environ.get("SCRAPINGBEE_KEY", "")
+        if not scrapingbee_key: return [], []
         api_url = "https://app.scrapingbee.com/api/v1/"
         params = {
             "api_key": scrapingbee_key,
@@ -125,8 +136,8 @@ def fetch_google_scholar(probe):
                 a_tag = h3.find('a')
                 if a_tag and 'href' in a_tag.attrs:
                     urls_found.append(a_tag['href'])
-    except:
-        pass
+    except Exception as e:
+        print(f"[!] Warning: API/Scraper error -> {e}")
     return urls_found, []
 
 def fetch_google_web(probe):
@@ -147,7 +158,9 @@ def fetch_google_web(probe):
             
         target_url = f"https://www.google.com/search?q={query}"
         
-        scrapingbee_key = "8IP8RZJY253EBD63MNWTQYSVPAAOKCOJ0TTZ3D6A8JMEXD2W6OSV5M75COHT4P0KSRG6FMAAQ41GG7U9"
+        import os
+        scrapingbee_key = os.environ.get("SCRAPINGBEE_KEY", "")
+        if not scrapingbee_key: return []
         api_url = "https://app.scrapingbee.com/api/v1/"
         params = {
             "api_key": scrapingbee_key,
@@ -168,8 +181,8 @@ def fetch_google_web(probe):
                     # Filter link valid (hindari link internal Google seperti accounts.google.com, dll)
                     if link.startswith('http') and 'google.com' not in link and 'google.co.id' not in link:
                         urls_found.append(link)
-    except:
-        pass
+    except Exception as e:
+        print(f"[!] Warning: API/Scraper error -> {e}")
     return urls_found, []
 
 def fetch_garuda(probe):
@@ -181,7 +194,9 @@ def fetch_garuda(probe):
         query = urllib.parse.quote(short_probe)
         target_url = f"https://garuda.kemdikbud.go.id/documents?q={query}"
         
-        scraperapi_key = "1d38c8aa7ea146522ff27ff5415fef02"
+        import os
+        scraperapi_key = os.environ.get("SCRAPERAPI_KEY", "")
+        if not scraperapi_key: return ""
         api_url = "https://api.scraperapi.com/"
         params = {
             "api_key": scraperapi_key,
@@ -199,15 +214,15 @@ def fetch_garuda(probe):
                     if not url.startswith('http'):
                         url = "https://garuda.kemdikbud.go.id" + url
                     urls_found.append(url)
-    except:
-        pass
+    except Exception as e:
+        print(f"[!] Warning: API/Scraper error -> {e}")
     return urls_found, []
 
 def fetch_ddgs(probe):
     """Mencari website publik biasa via DuckDuckGo, dengan Prioritas Situs Kampus/Jurnal"""
     urls_found = []
     try:
-        from ddgs import DDGS
+        from duckduckgo_search import DDGS
         ddgs = DDGS()
         
         # FUZZY SEARCH KEMBALI!
@@ -289,8 +304,8 @@ def fetch_ddgs(probe):
             
         urls_found.extend(final_urls)
         time.sleep(random.uniform(0.5, 1.5))
-    except:
-        pass
+    except Exception as e:
+        print(f"[!] Warning: API/Scraper error -> {e}")
     return urls_found, []
 
 def fetch_probe_multi(probe):
@@ -327,14 +342,28 @@ def fetch_probe_multi(probe):
     except Exception as e:
         print(f"[!] Free API fallbacks error: {e}")
     
-    # Gabungkan URL yang sudah ada abstraknya
-    api_urls = u_ss + u_cr + u_oa + u_repo
-    api_texts = t_ss + t_cr + t_oa + t_repo
+    # Gabungkan URL yang sudah ada abstraknya menjadi dictionary
+    preloaded = {}
+    for u, t in zip(u_ss, t_ss): preloaded[u] = t
+    for u, t in zip(u_cr, t_cr): preloaded[u] = t
+    for u, t in zip(u_repo, t_repo): preloaded[u] = t
     
-    # URL biasa yang perlu discrape kontennya
-    normal_urls = u_gs + u_gw + u_gr + u_dd + u_fallback
+    # OpenAlex dan Fallback CSE sering punya snippet/teks yang layak
+    normal_urls = u_gs + u_gw + u_gr + u_dd
     
-    return api_urls, api_texts, normal_urls
+    for u, t in zip(u_oa, t_oa):
+        if t and len(t) > 50:
+            preloaded[u] = t
+        else:
+            normal_urls.append(u)
+            
+    for u, t in zip(u_fallback, t_fallback):
+        if t and len(t) > 50:
+            preloaded[u] = t
+        else:
+            normal_urls.append(u)
+    
+    return preloaded, normal_urls
 
 def get_candidate_urls(sentences, max_probes=50, progress_cb=None):
     """
@@ -379,7 +408,9 @@ def get_candidate_urls(sentences, max_probes=50, progress_cb=None):
             # 1. PERPLEXITY AI
             try:
                 url_api = 'https://api.perplexity.ai/chat/completions'
-                api_key = "pplx-" + "3VSlkCtWU9mFCb5CWFaf64FiPNwp36oFq7p0bUQ2Vf7X7hdh"
+                import os
+                api_key = os.environ.get("PERPLEXITY_KEY", "")
+                if not api_key: raise Exception("No PERPLEXITY_KEY")
                 headers = {
                     'Authorization': f'Bearer {api_key}',
                     'Content-Type': 'application/json'
@@ -396,18 +427,15 @@ def get_candidate_urls(sentences, max_probes=50, progress_cb=None):
                     data = res.json()
                     for u in data.get('citations', []):
                         combined_urls.add(u)
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"[!] Perplexity API Error: {e}")
                 
             # 2. GEMINI AI GROUNDING (Sistem Load Balancer - 15 RPM per Key)
             try:
-                gemini_keys = [
-                    'AQ.' + 'Ab8RN6KmyC_5p2nNd2RTjI_GP8RH8dRTkiZjlyIe0nWnMreFkA',
-                    'AQ.' + 'Ab8RN6Jbxzy4R9s3uqvBCAeelNUGdxs_rYnPJcfEyRFvweOfdg',
-                    'AQ.' + 'Ab8RN6LwFvIR5GTXtwBq3LuniQRm3u3GrcEH02SYyB0FTGgQkg',
-                    'AQ.' + 'Ab8RN6K82OpqYBSZYk7dG-ASIS60R3rV75Ri7WtITh4-a0dZgw',
-                    'AQ.' + 'Ab8RN6KIKZ77P1g8bJM5G3hI_7sqF9D4wjl25kkFN4l7GFYAaA'
-                ]
+                import os
+                gemini_env = os.environ.get("GEMINI_KEYS", "")
+                if not gemini_env: raise Exception("No GEMINI_KEYS")
+                gemini_keys = gemini_env.split(',')
                 
                 # Hanya jalankan jika kita punya cukup kapasitas key untuk index ini
                 if idx < (len(gemini_keys) * 15):
@@ -432,12 +460,14 @@ def get_candidate_urls(sentences, max_probes=50, progress_cb=None):
                                 for chunk in cand.grounding_metadata.grounding_chunks:
                                     if chunk.web and chunk.web.uri:
                                         combined_urls.add(chunk.web.uri)
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"[!] Gemini API Error: {e}")
                 
             # 3. COHERE AI GROUNDING
             try:
-                cohere_key = 'cohere_' + 'xNiBe1AvGMMStc5CV1ADDHfbcqaen1kEEQGIAEVr3lbplI'
+                import os
+                cohere_key = os.environ.get("COHERE_KEY", "")
+                if not cohere_key: raise Exception("No COHERE_KEY")
                 cohere_url = "https://api.cohere.ai/v1/chat"
                 headers = {
                     "Authorization": f"Bearer {cohere_key}",
@@ -456,12 +486,14 @@ def get_candidate_urls(sentences, max_probes=50, progress_cb=None):
                         for doc in data['documents']:
                             if 'url' in doc:
                                 combined_urls.add(doc['url'])
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"[!] Cohere API Error: {e}")
                 
             # 4. TAVILY AI SEARCH
             try:
-                tavily_key = 'tvly-dev-' + '2X6rXl-rsUdeVbsOOP4RPdCC3cFgyVNBxsn0xcshduWJ8YGmo'
+                import os
+                tavily_key = os.environ.get("TAVILY_KEY", "")
+                if not tavily_key: raise Exception("No TAVILY_KEY")
                 tavily_url = "https://api.tavily.com/search"
                 payload = {
                     "api_key": tavily_key,
@@ -476,8 +508,8 @@ def get_candidate_urls(sentences, max_probes=50, progress_cb=None):
                         for result in data['results']:
                             if 'url' in result:
                                 combined_urls.add(result['url'])
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"[!] Tavily API Error: {e}")
                 
             return list(combined_urls)
             
@@ -507,10 +539,10 @@ def get_candidate_urls(sentences, max_probes=50, progress_cb=None):
                 # Tambahkan offset progres dari Perplexity (100 kalimat)
                 progress_cb(min(100, len(probes)) + i + 1, min(100, len(probes)) + len(probes))
             try:
-                api_urls, api_texts, ddg_urls = future.result()
+                preloaded, ddg_urls = future.result()
                 
                 # Masukkan hasil API langsung ke Corpus (tanpa perlu web-scrape)
-                for u, t in zip(api_urls, api_texts):
+                for u, t in preloaded.items():
                     preloaded_corpus[u] = t
                     
                 # Masukkan hasil DuckDuckGo ke antrian URL scraping
@@ -529,8 +561,10 @@ def scrape_url(url):
     total_bytes = 0
     try:
         import urllib.parse
+        import os
         encoded_url = urllib.parse.quote(url)
-        abstract_key = "ee2f030615c9473c843d35b7fa880c30"
+        abstract_key = os.environ.get("ABSTRACT_KEY", "")
+        if not abstract_key: return text
         proxy_url = f"https://scrape.abstractapi.com/v1/?api_key={abstract_key}&url={encoded_url}"
         
         # Naikkan timeout agar proses scrape web lambat (misal repositori kampus) tidak langsung gagal,
@@ -598,8 +632,8 @@ def scrape_url(url):
                                 for page_num, page in enumerate(pdf_doc):
                                     if page_num >= 5: break
                                     pdf_text += page.get_text() + " "
-                        except:
-                            pass
+                        except Exception as e:
+                            print(f"[!] Warning: API/Scraper error -> {e}")
                 
                 # Hapus tag yang tidak berisi konten ilmiah
                 for script in soup(["script", "style", "nav", "footer", "header", "aside", "menu"]):
@@ -610,8 +644,8 @@ def scrape_url(url):
                 text = text + " " + pdf_text
                 text = re.sub(r'\s+', ' ', text).strip()
                 return url, text, total_bytes
-    except:
-        pass
+    except Exception as e:
+        print(f"[!] Warning: API/Scraper error -> {e}")
     return url, "", total_bytes
 
 def scrape_all_candidates(urls, preloaded_corpus, progress_cb=None):
@@ -639,8 +673,8 @@ def scrape_all_candidates(urls, preloaded_corpus, progress_cb=None):
                 total_downloaded_bytes += downloaded_bytes
                 if len(text) > 150: # Validasi panjang minimal teks
                     corpus[url] = text
-            except:
-                pass
+            except Exception as e:
+                print(f"[!] Warning: API/Scraper error -> {e}")
             
             if progress_cb:
                 elapsed = time.time() - start_time
