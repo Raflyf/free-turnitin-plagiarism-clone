@@ -65,6 +65,25 @@ def process_document(file_id, filepath, original_filename, exclude_quotes=True, 
         print(f"[!] Mengunduh teks dari {len(urls)} kandidat...")
         corpus = scrape_all_candidates(urls, preloaded_corpus, progress_cb=scrape_progress)
         
+        # === GROUP BY DOMAIN (Mengatasi duplikat doi.org / website sama) ===
+        from urllib.parse import urlparse
+        grouped_corpus = {}
+        for url, text in corpus.items():
+            try:
+                parsed = urlparse(url)
+                if parsed.netloc:
+                    domain = parsed.netloc.replace('www.', '')
+                    domain_url = f"{parsed.scheme}://{domain}"
+                    if domain_url not in grouped_corpus:
+                        grouped_corpus[domain_url] = text
+                    else:
+                        grouped_corpus[domain_url] += "\n\n" + text
+                else:
+                    grouped_corpus[url] = text
+            except:
+                grouped_corpus[url] = text
+        corpus = grouped_corpus
+        
         set_progress(85, "Menghitung kemiripan (Algoritma N-Gram)...")
         print("[!] Menghitung similaritas dengan algoritma N-Gram Shingling...")
         sorted_sources, total_similarity, plagiarized_sentences = calculate_similarity(doc_text, corpus, exclude_small, use_semantic=use_semantic)
