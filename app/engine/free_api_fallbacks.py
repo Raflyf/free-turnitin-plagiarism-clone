@@ -115,6 +115,10 @@ def search_google_custom(query, api_key, cx_id, max_results=10):
                         print(f"[Google API] Rate limit reached, stopping...")
                         break
                     
+                    else:
+                        print(f"[Google API] Error HTTP {response.status_code}: {response.text}")
+                        break
+                    
                     # Hindari rate limiting dengan delay kecil antar request
                     time.sleep(0.5)
                     
