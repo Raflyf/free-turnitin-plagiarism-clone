@@ -18,14 +18,19 @@ def detect_manipulation(text):
     return warnings
 
 def extract_text_from_pdf(filepath, exclude_quotes=True, exclude_biblio=True):
+    """Extract text from PDF with robust error handling"""
     text = ""
     try:
         doc = fitz.open(filepath)
         for page in doc:
             text += page.get_text() + " "
         doc.close()
+        
+        if not text.strip():
+            raise Exception("PDF appears to be empty or contains only images")
+            
     except Exception as e:
-        print(f"Error reading PDF: {e}")
+        raise Exception(f"Failed to extract PDF: {str(e)}")
         
     manipulation_warnings = detect_manipulation(text)
     
@@ -38,6 +43,36 @@ def extract_text_from_pdf(filepath, exclude_quotes=True, exclude_biblio=True):
     cleaned_text = cleaned_text.translate(cyrillic_to_latin)
     
     return cleaned_text, manipulation_warnings
+
+def extract_text_from_txt(txt_path):
+    """Extract text from TXT with automatic encoding detection"""
+    try:
+        import chardet
+        
+        # Detect encoding
+        with open(txt_path, 'rb') as f:
+            raw_data = f.read()
+        
+        if not raw_data:
+            raise Exception("File is empty")
+        
+        detected = chardet.detect(raw_data)
+        encoding = detected['encoding'] or 'utf-8'
+        
+        # Try detected encoding with fallbacks
+        encodings_to_try = [encoding, 'utf-8', 'latin-1', 'cp1252', 'iso-8859-1']
+        
+        for enc in encodings_to_try:
+            try:
+                return raw_data.decode(enc)
+            except (UnicodeDecodeError, AttributeError):
+                continue
+        
+        # Last resort: decode with errors='replace'
+        return raw_data.decode('utf-8', errors='replace')
+        
+    except Exception as e:
+        raise Exception(f"Failed to extract TXT: {str(e)}")
 
 def clean_text(text, exclude_quotes=True, exclude_biblio=True):
     text = re.sub(r'\s+', ' ', text).strip()
@@ -65,7 +100,7 @@ def clean_text(text, exclude_quotes=True, exclude_biblio=True):
     
     # [3] Exclude Quotes
     if exclude_quotes:
-        text = re.sub(r'["“”].*?["“”]', '', text)
+        text = re.sub(r'["""].*?["""]', '', text)
     
     return text
 

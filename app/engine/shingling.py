@@ -260,6 +260,7 @@ def calculate_similarity(doc_text, corpus, exclude_small=False, use_semantic=Tru
                     semantic_plagiarized_words += newly_detected_words
                     
                     # Update sources_report dengan info semantic
+                    # PENTING: Hanya hitung kata yang BARU terdeteksi (newly_detected_words), bukan seluruh kalimat
                     source_url = best_match['source_url']
                     if source_url not in sources_report:
                         # Buat entry baru untuk sumber yang terdeteksi via semantic
@@ -271,8 +272,8 @@ def calculate_similarity(doc_text, corpus, exclude_small=False, use_semantic=Tru
                             'detection_method': 'semantic'
                         }
                     
-                    # Update statistik sumber
-                    sources_report[source_url]['matched_words'] += sent_word_count
+                    # Update statistik sumber - HANYA tambahkan kata yang baru terdeteksi (no double counting)
+                    sources_report[source_url]['matched_words'] += newly_detected_words
                     sources_report[source_url]['percentage'] = (
                         sources_report[source_url]['matched_words'] / total_doc_words
                     ) * 100.0

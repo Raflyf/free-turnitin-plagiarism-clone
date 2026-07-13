@@ -1,7 +1,9 @@
 import os
 import time
 import math
-from flask import Flask, render_template, request, jsonify, send_file
+import uuid
+import secrets
+from flask import Flask, render_template, request, jsonify, send_file, session
 from werkzeug.utils import secure_filename
 import threading
 from engine.extractor import extract_text_from_pdf, get_sentences
@@ -10,6 +12,8 @@ from engine.shingling import calculate_similarity
 from engine.pdf_generator import generate_report_pdf
 
 app = Flask(__name__)
+# Security: Generate secure secret key for sessions
+app.config['SECRET_KEY'] = os.environ.get('FLASK_SECRET_KEY') or secrets.token_hex(32)
 # Gunakan absolute path agar direktori selalu berada di dalam folder app/ 
 base_dir = os.path.dirname(os.path.abspath(__file__))
 app.config['UPLOAD_FOLDER'] = os.path.join(base_dir, 'uploads')
@@ -102,14 +106,21 @@ def upload_file():
         
     if file and file.filename.endswith('.pdf'):
         filename = secure_filename(file.filename)
-        file_id = f"skripsi_final_{int(time.time() * 1000)}"
+        # SECURITY FIX: Use cryptographically secure UUID instead of predictable timestamp
+        file_id = str(uuid.uuid4())
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], f"{file_id}.pdf")
         file.save(filepath)
+        
+        # SECURITY FIX: Store session ID for ownership validation
+        if 'session_id' not in session:
+            session['session_id'] = secrets.token_urlsafe(32)
         
         results_db[file_id] = {
             'status': 'processing', 
             'progress': 0, 
-            'message': 'Memulai proses...'
+            'message': 'Memulai proses...',
+            'session_id': session['session_id'],  # Track ownership
+            'filename': filename
         }
         thread = threading.Thread(target=process_document, args=(file_id, filepath, filename, exclude_quotes, exclude_biblio, exclude_small), daemon=True)
         thread.start()
@@ -119,24 +130,58 @@ def upload_file():
 
 @app.route('/status/<file_id>')
 def status(file_id):
-    data = results_db.get(file_id, {'status': 'not_found'})
-    return jsonify(data)
+    # SECURITY FIX: Validate ownership before returning status
+    if file_id not in results_db:
+        return jsonify({'status': 'not_found'}), 404
+    
+    file_data = results_db[file_id]
+    current_session = session.get('session_id')
+    
+    # Check ownership
+    if file_data.get('session_id') != current_session:
+        return jsonify({'error': 'Unauthorized access'}), 403
+    
+    # Don't expose session_id to client
+    safe_data = {k: v for k, v in file_data.items() if k != 'session_id'}
+    return jsonify(safe_data)
 
 @app.route('/report/<file_id>')
 def report(file_id):
-    if file_id in results_db and results_db[file_id]['status'] == 'completed':
-        data = results_db[file_id]['data']
+    # SECURITY FIX: Validate ownership before showing report
+    if file_id not in results_db:
+        return "Laporan tidak ditemukan.", 404
+    
+    file_data = results_db[file_id]
+    current_session = session.get('session_id')
+    
+    # Check ownership
+    if file_data.get('session_id') != current_session:
+        return "Akses tidak diizinkan.", 403
+    
+    if file_data['status'] == 'completed':
+        data = file_data['data']
         data_for_html = {k:v for k,v in data.items() if k != 'plagiarized_sentences'}
         return render_template('report.html', data=data_for_html, file_id=file_id)
     return "Laporan belum siap atau terjadi kesalahan.", 404
 
 @app.route('/download/<file_id>')
 def download_report(file_id):
+    # SECURITY FIX: Validate ownership before allowing download
+    if file_id not in results_db:
+        return "Laporan tidak ditemukan.", 404
+    
+    file_data = results_db[file_id]
+    current_session = session.get('session_id')
+    
+    # Check ownership
+    if file_data.get('session_id') != current_session:
+        return "Akses tidak diizinkan.", 403
+    
     report_pdf_path = os.path.join(app.config['REPORT_FOLDER'], f"{file_id}_report.pdf")
     if os.path.exists(report_pdf_path):
         download_name = f"{file_id}_turnitin.pdf"
-        if file_id in results_db and 'data' in results_db[file_id]:
-            original = results_db[file_id]['data'].get('filename', file_id)
+        if 'data' in file_data:
+            original = file_data['data'].get('filename', file_id)
             download_name = f"{original}_turnitin.pdf"
         return send_file(report_pdf_path, as_attachment=True, download_name=download_name)
     return "PDF Report not found", 404
