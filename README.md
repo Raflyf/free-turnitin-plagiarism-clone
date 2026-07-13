@@ -180,6 +180,7 @@ Each source shows:
 
 - Audit awal: **[docs/AUDIT_LENGKAP.md](docs/AUDIT_LENGKAP.md)** — Juli 2026
 - Audit ulang (pasca-perbaikan): **[docs/AUDIT_ULANG.md](docs/AUDIT_ULANG.md)** — Juli 2026
+- Audit ronde 3: **[docs/AUDIT_R3.md](docs/AUDIT_R3.md)** — Juli 2026
 
 ## 📝 Changelog
 

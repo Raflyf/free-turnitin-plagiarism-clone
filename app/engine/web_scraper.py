@@ -160,7 +160,7 @@ def fetch_google_web(probe):
         
         import os
         scrapingbee_key = os.environ.get("SCRAPINGBEE_KEY", "")
-        if not scrapingbee_key: return []
+        if not scrapingbee_key: return [], []
         api_url = "https://app.scrapingbee.com/api/v1/"
         params = {
             "api_key": scrapingbee_key,
@@ -196,7 +196,7 @@ def fetch_garuda(probe):
         
         import os
         scraperapi_key = os.environ.get("SCRAPERAPI_KEY", "")
-        if not scraperapi_key: return ""
+        if not scraperapi_key: return [], []
         api_url = "https://api.scraperapi.com/"
         params = {
             "api_key": scraperapi_key,
@@ -551,7 +551,7 @@ def get_candidate_urls(sentences, max_probes=50, progress_cb=None):
                         urls.add(u)
                         
             except Exception as e:
-                pass
+                print(f"[!] Peringatan di get_candidate_urls worker: {e}")
                 
     print(f"[API] Berhasil menarik {len(preloaded_corpus)} abstrak jurnal dan {len(urls)} link web publik.")
     return list(urls), preloaded_corpus
@@ -564,15 +564,17 @@ def scrape_url(url):
         import os
         encoded_url = urllib.parse.quote(url)
         abstract_key = os.environ.get("ABSTRACT_KEY", "")
-        if not abstract_key: return text
-        proxy_url = f"https://scrape.abstractapi.com/v1/?api_key={abstract_key}&url={encoded_url}"
-        
-        # Naikkan timeout agar proses scrape web lambat (misal repositori kampus) tidak langsung gagal,
-        # tapi cukup agresif (15 detik) untuk mencegah sistem tersedak.
-        res = requests.get(proxy_url, timeout=15)
-        
-        # FALLBACK: Jika API Proxy habis limit (429) atau gagal (401), coba unduh langsung tanpa proxy!
-        if res.status_code != 200:
+        if abstract_key:
+            proxy_url = f"https://scrape.abstractapi.com/v1/?api_key={abstract_key}&url={encoded_url}"
+            
+            # Naikkan timeout agar proses scrape web lambat (misal repositori kampus) tidak langsung gagal,
+            # tapi cukup agresif (15 detik) untuk mencegah sistem tersedak.
+            res = requests.get(proxy_url, timeout=15)
+            
+            # FALLBACK: Jika API Proxy habis limit (429) atau gagal (401), coba unduh langsung tanpa proxy!
+            if res.status_code != 200:
+                res = requests.get(url, timeout=15, verify=False)
+        else:
             res = requests.get(url, timeout=15, verify=False)
             
         if res.status_code == 200:

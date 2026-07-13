@@ -13,7 +13,7 @@ _model = None
 def get_model():
     """
     Load and cache the sentence-transformers model.
-    Using 'all-MiniLM-L6-v2' - a lightweight but effective model for semantic similarity.
+    Using 'paraphrase-multilingual-MiniLM-L12-v2' - a lightweight but effective model for semantic similarity in Indonesian.
     """
     global _model
     if _model is None:
