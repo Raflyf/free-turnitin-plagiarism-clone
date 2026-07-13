@@ -144,67 +144,42 @@ def search_google_custom(query, api_key, cx_id, max_results=10):
 
 def search_duckduckgo_html(query, max_results=10):
     """
-    DuckDuckGo HTML scraping (no API needed, unlimited)
-    Fallback paling reliable tanpa batasan
+    Menggunakan library duckduckgo_search (DDGS) yang jauh lebih handal
+    dalam mengatasi rate limiting dibandingkan scraping HTML manual.
     """
     urls_found = []
     texts_found = []
     
     try:
-        import urllib.parse
-        from bs4 import BeautifulSoup
-        encoded_query = urllib.parse.quote(query)
-        url = f"https://html.duckduckgo.com/html/?q={encoded_query}"
+        from duckduckgo_search import DDGS
+        import time
         
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        }
-        # Nonaktifkan warning SSL insecure
-        import urllib3
-        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        # Limit panjang query (DDG menolak query yang sangat panjang)
+        short_query = ' '.join(query.split()[:15])
         
-        res = requests.get(url, headers=headers, timeout=10, verify=False)
-        if res.status_code == 200:
-            soup = BeautifulSoup(res.text, 'html.parser')
+        # Delay singkat acak untuk menghindari rate limit agresif
+        time.sleep(0.5)
+        
+        with DDGS() as ddgs:
+            results = list(ddgs.text(short_query, max_results=max_results))
             
-            # Extract results from HTML version
-            results = soup.find_all('a', class_='result__url', limit=max_results)
-            if not results:
-                results = soup.find_all('a', class_='result__snippet', limit=max_results)
+            for res in results:
+                url = res.get('href', '')
+                title = res.get('title', '')
+                body = res.get('body', '')
                 
-            for result in results:
-                href = result.get('href', '')
-                if href:
-                    # Unquote DuckDuckGo redirect link jika ada
-                    if 'uddg=' in href:
-                        try:
-                            href = href.split('uddg=')[1].split('&')[0]
-                            href = urllib.parse.unquote(href)
-                        except:
-                            pass
+                if url:
+                    urls_found.append(url)
+                    texts_found.append(f"{title}. {body}")
                     
-                    if href.startswith('//'):
-                        href = 'https:' + href
-                    elif href.startswith('/'):
-                        continue # Skip internal links
-                        
-                    if href.startswith('http') and href not in urls_found:
-                        urls_found.append(href)
-                        # Snippet text extraction
-                        parent = result.find_parent('div', class_='web-result')
-                        snippet = ""
-                        if parent:
-                            snippet_elem = parent.find(class_='result__snippet')
-                            if snippet_elem:
-                                snippet = snippet_elem.get_text(strip=True)
-                        texts_found.append(snippet[:500])
-                    
-        print(f"[DuckDuckGo HTML] Found {len(urls_found)} results")
-        time.sleep(1)  # Rate limit
-        
+        if urls_found:
+            print(f"[DuckDuckGo API] Found {len(urls_found)} results")
+        else:
+            print("[DuckDuckGo API] Found 0 results (Query mungkin terlalu spesifik)")
+            
     except Exception as e:
-        print(f"[!] DuckDuckGo HTML error: {e}")
-    
+        print(f"[!] DuckDuckGo API error: {e}")
+        
     return urls_found, texts_found
 
 def search_with_fallbacks(query, use_cache=True):
