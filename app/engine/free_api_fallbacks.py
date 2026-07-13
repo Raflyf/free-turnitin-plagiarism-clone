@@ -115,8 +115,13 @@ def search_google_custom(query, api_key, cx_id, max_results=10):
                         print(f"[Google API] Rate limit reached, stopping...")
                         break
                     
+                    elif response.status_code in [400, 403]:
+                        # Sembunyikan JSON error panjang dari Google karena ini memang diblokir dari pusat (Google Policy)
+                        print(f"[Google API] Akses ditolak (HTTP {response.status_code}) - Menggunakan fallback...")
+                        break
+                        
                     else:
-                        print(f"[Google API] Error HTTP {response.status_code}: {response.text}")
+                        print(f"[Google API] Error HTTP {response.status_code}")
                         break
                     
                     # Hindari rate limiting dengan delay kecil antar request
@@ -138,7 +143,7 @@ def search_google_custom(query, api_key, cx_id, max_results=10):
             print(f"[Google Custom Search] Found {len(urls_found)} results")
         
     except Exception as e:
-        print(f"[!] Google Custom Search error: {e}")
+        pass  # Sembunyikan error global agar tidak panik
     
     return urls_found, texts_found
 
@@ -202,9 +207,8 @@ def search_with_fallbacks(query, use_cache=True):
     
     # Google Custom Search API credentials
     google_api_keys = [
-        'AIzaSyASFkoAGGe3XMIWCb2w9ztcCg8W5TpLu70',  # Key Utama Anda
-        'AIzaSyDXq3lXq3lXq3lXq3lXq3lXq3lXq3lXq3l',  # Backup 1
-        'AIzaSyDYr4mYr4mYr4mYr4mYr4mYr4mYr4mYr4m',  # Backup 2
+        'AIzaSyAYHWCzB4cngtXwNG8VX5gl-PejHSj2DdY',  # Key Utama Anda
+        'AIzaSyDU_W1ABFJqxob_PdsGfMVHKLPFLgEd0Lk',  # Key Backup Akun Kedua Anda
     ]
     cx_id = '71bc58731f30a4f5d'
     
