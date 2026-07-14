@@ -81,8 +81,10 @@ def search_repository_direct(repo_url, query, max_results=5):
     try:
         # Deteksi platform repository
         platform = detect_platform(repo_url)
-        
-        if platform == "eprints":
+
+        if platform == "ubsi":
+            urls_found, texts_found = search_ubsi(repo_url, query, max_results)
+        elif platform == "eprints":
             urls_found, texts_found = search_eprints(repo_url, query, max_results)
         elif platform == "dspace":
             urls_found, texts_found = search_dspace(repo_url, query, max_results)
@@ -106,8 +108,11 @@ def detect_platform(repo_url):
     try:
         res = requests.get(repo_url, timeout=5, verify=False)
         html = res.text.lower()
-        
-        if "eprints" in html or "eprints" in repo_url.lower():
+
+        # UBSI custom platform (BSI, Nusamandiri) - endpoint /repo/cari
+        if "/repo/cari" in html or "repository ubsi" in html:
+            return "ubsi"
+        elif "eprints" in html or "eprints" in repo_url.lower():
             return "eprints"
         elif "dspace" in html or "dspace" in repo_url.lower():
             return "dspace"
@@ -118,13 +123,100 @@ def detect_platform(repo_url):
     except:
         # Deteksi dari URL saja jika request gagal
         url_lower = repo_url.lower()
-        if "eprints" in url_lower:
+        if "bsi.ac.id" in url_lower or "nusamandiri" in url_lower:
+            return "ubsi"
+        elif "eprints" in url_lower:
             return "eprints"
         elif "etheses" in url_lower or "repository" in url_lower:
             return "dspace"
         elif "ejurnal" in url_lower or "ejournal" in url_lower:
             return "ojs"
         return "unknown"
+
+def search_ubsi(repo_url, query, max_results=5):
+    """
+    Search UBSI custom platform (repository.bsi.ac.id, repository.nusamandiri.ac.id).
+    Endpoint: /repo/cari?q=QUERY. Hasil berupa link /repo/{id}/{slug}.
+    Halaman detail memuat metadata + link PDF download.
+    """
+    urls_found = []
+    texts_found = []
+    hdr = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+
+    # Perpendek query agar tidak terlalu spesifik (phrase match ketat = 0 hasil)
+    short_q = " ".join(query.split()[:6])
+    search_url = f"{repo_url}/repo/cari"
+    try:
+        res = requests.get(search_url, params={"q": short_q}, timeout=15, verify=False, headers=hdr)
+    except Exception:
+        return urls_found, texts_found
+    if res.status_code != 200:
+        return urls_found, texts_found
+
+    soup = BeautifulSoup(res.text, 'html.parser')
+    seen = set()
+    detail_urls = []
+    for a in soup.find_all('a', href=True):
+        href = a['href']
+        # Link item: /repo/<digit>/<slug> (bukan /repo/cari)
+        if re.search(r'/repo/\d+', href) and 'cari' not in href:
+            title = a.get_text(strip=True)
+            if len(title) > 15:
+                full = href if href.startswith('http') else repo_url + href
+                if full not in seen:
+                    seen.add(full)
+                    detail_urls.append((full, title))
+
+    # Ambil metadata dari halaman detail (maks max_results)
+    for full, title in detail_urls[:max_results]:
+        # Judul selalu berguna sebagai teks pembanding minimal
+        best_url = full
+        best_text = title
+        try:
+            dr = requests.get(full, timeout=10, verify=False, headers=hdr)
+            if dr.status_code == 200:
+                dsoup = BeautifulSoup(dr.text, 'html.parser')
+
+                # Tambahkan teks halaman detail (abstrak/metadata) ke teks pembanding
+                for s in dsoup(["script", "style", "nav", "footer", "header"]):
+                    s.decompose()
+                page_text = re.sub(r'\s+', ' ', dsoup.get_text(' ')).strip()
+                if len(page_text) > len(best_text):
+                    best_text = page_text
+
+                # Cari link PDF download untuk full-text
+                pdf_url = None
+                for a in dsoup.find_all('a', href=True):
+                    h = a['href']
+                    if '.pdf' in h.lower() or '/download/' in h.lower():
+                        pdf_url = h if h.startswith('http') else repo_url + h
+                        break
+
+                if pdf_url:
+                    try:
+                        import fitz
+                        pr = requests.get(pdf_url, timeout=20, verify=False, headers=hdr)
+                        if pr.status_code == 200 and pr.content[:4] == b'%PDF':
+                            doc = fitz.open(stream=pr.content, filetype="pdf")
+                            pdf_text = ""
+                            for pnum, page in enumerate(doc):
+                                if pnum >= 8:
+                                    break
+                                pdf_text += page.get_text() + " "
+                            doc.close()
+                            if len(pdf_text) > 200:
+                                best_text = re.sub(r'\s+', ' ', pdf_text).strip()
+                                best_url = pdf_url
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
+        if len(best_text) > 30:
+            urls_found.append(best_url)
+            texts_found.append(best_text)
+
+    return urls_found, texts_found
 
 def search_eprints(repo_url, query, max_results=5):
     """Search EPrints repository (format: eprints.*.ac.id)"""

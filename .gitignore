@@ -7,3 +7,8 @@ reports/
 .env
 .env.local
 *.env
+
+# Audit R5 additions
+.search_cache/
+app/before_turnitin/
+*.pdf

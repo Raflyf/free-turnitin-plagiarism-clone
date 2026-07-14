@@ -8,6 +8,10 @@ from concurrent.futures import ThreadPoolExecutor
 # Sembunyikan peringatan jika situs web yang di-scrape berupa XML/RSS
 warnings.filterwarnings("ignore", category=XMLParsedAsHTMLWarning)
 
+# Budget global: jumlah probe yang boleh menyisir repo Indonesia (lambat karena throttling
+# server kampus). Di-reset tiap run di get_candidate_urls(). Melindungi dari 75x hit.
+_INDO_REPO_BUDGET = 15
+
 def fetch_semantic_scholar(probe):
     """Mencari paper di Semantic Scholar (Mencakup 200 Juta+ Makalah Akademik)"""
     urls_found = []
@@ -316,13 +320,20 @@ def fetch_doaj(probe):
     urls_found = []
     texts_found = []
     try:
-        short_probe = " ".join(probe.split()[:12])
-        url = "https://doaj.org/api/search/articles/" + requests.utils.quote(short_probe)
-        params = {"pageSize": 5}
-        res = requests.get(url, params=params, timeout=8)
-        if res.status_code == 200:
+        # DOAJ path-search bersifat phrase-match ketat. Probe panjang -> 0 hasil.
+        # Gunakan query pendek (6 kata) agar mendapat kandidat, lalu turunkan bila kosong.
+        words = probe.split()
+        for n_words in (6, 4):
+            short_probe = " ".join(words[:n_words])
+            url = "https://doaj.org/api/search/articles/" + requests.utils.quote(short_probe)
+            res = requests.get(url, params={"pageSize": 5}, timeout=8)
+            if res.status_code != 200:
+                continue
             data = res.json()
-            for item in data.get('results', []):
+            results = data.get('results', [])
+            if not results:
+                continue
+            for item in results:
                 bibjson = item.get('bibjson', {})
                 title = bibjson.get('title', '')
                 abstract = bibjson.get('abstract', '')
@@ -333,8 +344,7 @@ def fetch_doaj(probe):
                         p_url = lnk.get('url', '')
                         break
                 if not p_url:
-                    identifiers = bibjson.get('identifier', [])
-                    for ident in identifiers:
+                    for ident in bibjson.get('identifier', []):
                         if ident.get('type') == 'doi':
                             p_url = f"https://doi.org/{ident.get('id', '')}"
                             break
@@ -342,16 +352,19 @@ def fetch_doaj(probe):
                 if p_url and len(combined) > 50:
                     urls_found.append(p_url)
                     texts_found.append(combined)
+            if urls_found:
+                break
     except Exception as e:
         print(f"[!] DOAJ API error: {e}")
     return urls_found, texts_found
 
 def fetch_arxiv(probe):
-    """Mencari preprint di arXiv (2.4M+ papers, gratis tanpa API key)"""
+    """Mencari preprint di arXiv (2.4M+ papers, gratis tanpa API key). English STEM only."""
     urls_found = []
     texts_found = []
     try:
         import urllib.parse
+        import re as _re
         short_probe = " ".join(probe.split()[:10])
         search_url = "http://export.arxiv.org/api/query"
         params = {
@@ -361,16 +374,19 @@ def fetch_arxiv(probe):
         }
         res = requests.get(search_url, params=params, timeout=8)
         if res.status_code == 200:
-            from bs4 import BeautifulSoup
-            soup = BeautifulSoup(res.text, 'xml')
-            for entry in soup.find_all('entry'):
-                title = entry.find('title')
-                summary = entry.find('summary')
-                link = entry.find('id')
-                if title and summary and link:
-                    combined = f"{title.text.strip()}. {summary.text.strip()}"
+            # Parse Atom feed via regex (hindari dependency lxml/xml parser)
+            entries = _re.findall(r'<entry>(.*?)</entry>', res.text, _re.S)
+            for entry in entries:
+                t_match = _re.search(r'<title>(.*?)</title>', entry, _re.S)
+                s_match = _re.search(r'<summary>(.*?)</summary>', entry, _re.S)
+                id_match = _re.search(r'<id>(.*?)</id>', entry, _re.S)
+                if t_match and s_match and id_match:
+                    title = _re.sub(r'\s+', ' ', t_match.group(1)).strip()
+                    summary = _re.sub(r'\s+', ' ', s_match.group(1)).strip()
+                    link = id_match.group(1).strip()
+                    combined = f"{title}. {summary}"
                     if len(combined) > 50:
-                        urls_found.append(link.text.strip())
+                        urls_found.append(link)
                         texts_found.append(combined)
         time.sleep(0.5)
     except Exception as e:
@@ -378,14 +394,19 @@ def fetch_arxiv(probe):
     return urls_found, texts_found
 
 def fetch_core(probe):
-    """Mencari paper di CORE.ac.uk (300M+ papers, gratis tanpa API key untuk search)"""
+    """Mencari paper di CORE.ac.uk (300M+ papers). Butuh CORE_API_KEY (v3 Bearer token)."""
     urls_found = []
     texts_found = []
+    import os
+    core_key = os.environ.get("CORE_API_KEY", "")
+    if not core_key:
+        # Tanpa API key, CORE v3 konsisten timeout/401. Skip cepat agar tidak memblokir pipeline.
+        return urls_found, texts_found
     try:
         short_probe = " ".join(probe.split()[:12])
         url = "https://api.core.ac.uk/v3/search/works"
         params = {"q": short_probe, "limit": 5}
-        headers = {"Accept": "application/json"}
+        headers = {"Accept": "application/json", "Authorization": f"Bearer {core_key}"}
         res = requests.get(url, params=params, headers=headers, timeout=8)
         if res.status_code == 200:
             data = res.json()
@@ -432,14 +453,20 @@ def fetch_probe_multi(probe):
     # 3. Try DuckDuckGo (free, unlimited)
     u_dd, _ = fetch_ddgs(probe)
     
-    # 4. NEW: Direct search Indonesian repositories (no API limits!)
+    # 4. Direct search Indonesian repositories (no API limits, TAPI lambat: BSI ~15s/req).
+    # Dibatasi global agar tidak jalan 75x (=375 request kampus). Hanya probe paling awal
+    # (kalimat terpanjang/paling spesifik) yang menyisir repo lokal; sisanya sudah tercakup
+    # API akademik + DDG. Repo tetap disisir menyeluruh via get_candidate_urls terpisah.
     u_repo, t_repo = [], []
-    try:
-        from .indonesian_repos import search_all_indonesian_repos
-        u_repo, t_repo = search_all_indonesian_repos(probe, max_repos=5, results_per_repo=2)
-        print(f"[INDO REPOS] Found {len(u_repo)} URLs from Indonesian repositories")
-    except Exception as e:
-        print(f"[!] Indonesian repos module error: {e}")
+    global _INDO_REPO_BUDGET
+    if _INDO_REPO_BUDGET > 0:
+        _INDO_REPO_BUDGET -= 1
+        try:
+            from .indonesian_repos import search_all_indonesian_repos
+            u_repo, t_repo = search_all_indonesian_repos(probe, max_repos=3, results_per_repo=2)
+            print(f"[INDO REPOS] Found {len(u_repo)} URLs from Indonesian repositories")
+        except Exception as e:
+            print(f"[!] Indonesian repos module error: {e}")
     
     # 5. NEW: Free API fallbacks with caching (jika paid APIs gagal)
     u_fallback, t_fallback = [], []
@@ -487,6 +514,10 @@ def get_candidate_urls(sentences, max_probes=75, progress_cb=None):
     - Tier 2 (33%): Kalimat medium-length (balanced coverage)
     - Tier 3 (34%): Uniform sampling across document (ensures all chapters covered)
     """
+    # Reset budget penyisiran repo Indonesia untuk run ini (probe Tier-1 didahulukan).
+    global _INDO_REPO_BUDGET
+    _INDO_REPO_BUDGET = 15
+
     valid_sentences = [s for s in sentences if len(s.split()) >= 8]
     if len(valid_sentences) <= max_probes:
         probes = valid_sentences
