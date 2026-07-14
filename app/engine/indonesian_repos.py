@@ -133,33 +133,33 @@ def search_eprints(repo_url, query, max_results=5):
     
     # EPrints advanced search URL
     search_url = f"{repo_url}/cgi/search/simple"
-        params = {
-            "q": query,
-            "_order": "bytitle",
-            "t": "fulltext"
-        }
+    params = {
+        "q": query,
+        "_order": "bytitle",
+        "t": "fulltext"
+    }
+    
+    res = requests.get(search_url, params=params, timeout=10, verify=False)
+    if res.status_code == 200:
+        soup = BeautifulSoup(res.text, 'html.parser')
         
-        res = requests.get(search_url, params=params, timeout=10, verify=False)
-        if res.status_code == 200:
-            soup = BeautifulSoup(res.text, 'html.parser')
-            
-            # EPrints result links biasanya di <cite> atau <div class="ep_search_result">
-            results = soup.find_all(['cite', 'div'], limit=max_results*2)
-            
-            for result in results[:max_results]:
-                # Ekstrak link
-                link = result.find('a', href=True)
-                if link:
-                    url = link['href']
-                    if not url.startswith('http'):
-                        url = repo_url + url
-                    
-                    # Ekstrak abstract/snippet
-                    abstract = result.get_text(strip=True)
-                    
-                    if len(abstract) > 50:
-                        urls_found.append(url)
-                        texts_found.append(abstract[:500])
+        # EPrints result links biasanya di <cite> atau <div class="ep_search_result">
+        results = soup.find_all(['cite', 'div'], limit=max_results*2)
+        
+        for result in results[:max_results]:
+            # Ekstrak link
+            link = result.find('a', href=True)
+            if link:
+                url = link['href']
+                if not url.startswith('http'):
+                    url = repo_url + url
+                
+                # Ekstrak abstract/snippet
+                abstract = result.get_text(strip=True)
+                
+                if len(abstract) > 50:
+                    urls_found.append(url)
+                    texts_found.append(abstract[:500])
                         
     return urls_found, texts_found
 
@@ -170,31 +170,31 @@ def search_dspace(repo_url, query, max_results=5):
     
     # DSpace simple search
     search_url = f"{repo_url}/simple-search"
-        params = {
-            "query": query,
-            "sort_by": "score",
-            "order": "desc"
-        }
+    params = {
+        "query": query,
+        "sort_by": "score",
+        "order": "desc"
+    }
+    
+    res = requests.get(search_url, params=params, timeout=10, verify=False)
+    if res.status_code == 200:
+        soup = BeautifulSoup(res.text, 'html.parser')
         
-        res = requests.get(search_url, params=params, timeout=10, verify=False)
-        if res.status_code == 200:
-            soup = BeautifulSoup(res.text, 'html.parser')
-            
-            # DSpace results biasanya di <div class="artifact-title"> atau <td class="metadataFieldValue">
-            results = soup.find_all(['div', 'td'], class_=re.compile(r'artifact|metadata'), limit=max_results*2)
-            
-            for result in results[:max_results]:
-                link = result.find('a', href=True)
-                if link:
-                    url = link['href']
-                    if not url.startswith('http'):
-                        url = repo_url + url
-                    
-                    abstract = result.get_text(strip=True)
-                    
-                    if len(abstract) > 50:
-                        urls_found.append(url)
-                        texts_found.append(abstract[:500])
+        # DSpace results biasanya di <div class="artifact-title"> atau <td class="metadataFieldValue">
+        results = soup.find_all(['div', 'td'], class_=re.compile(r'artifact|metadata'), limit=max_results*2)
+        
+        for result in results[:max_results]:
+            link = result.find('a', href=True)
+            if link:
+                url = link['href']
+                if not url.startswith('http'):
+                    url = repo_url + url
+                
+                abstract = result.get_text(strip=True)
+                
+                if len(abstract) > 50:
+                    urls_found.append(url)
+                    texts_found.append(abstract[:500])
                         
     return urls_found, texts_found
 
@@ -205,38 +205,38 @@ def search_ojs(repo_url, query, max_results=5):
     
     # OJS search endpoint (varies by version)
     for pattern in OJS_SEARCH_PATTERNS:
-            try:
-                search_url = repo_url + pattern
-                params = {"query": query}
+        try:
+            search_url = repo_url + pattern
+            params = {"query": query}
+            
+            res = requests.get(search_url, params=params, timeout=10, verify=False)
+            if res.status_code == 200:
+                soup = BeautifulSoup(res.text, 'html.parser')
                 
-                res = requests.get(search_url, params=params, timeout=10, verify=False)
-                if res.status_code == 200:
-                    soup = BeautifulSoup(res.text, 'html.parser')
-                    
-                    # OJS results dalam <div class="result"> atau <article>
-                    results = soup.find_all(['div', 'article'], class_=re.compile(r'result|article|item'), limit=max_results)
-                    
-                    for result in results:
-                        link = result.find('a', href=True)
-                        if link:
-                            url = link['href']
-                            if not url.startswith('http'):
-                                url = repo_url + url
-                            
-                            abstract = result.get_text(strip=True)
-                            
-                            if len(abstract) > 50:
-                                urls_found.append(url)
-                                texts_found.append(abstract[:500])
-                    
-                    if urls_found:
-                        break  # Found results, no need to try other patterns
+                # OJS results dalam <div class="result"> atau <article>
+                results = soup.find_all(['div', 'article'], class_=re.compile(r'result|article|item'), limit=max_results)
+                
+                for result in results:
+                    link = result.find('a', href=True)
+                    if link:
+                        url = link['href']
+                        if not url.startswith('http'):
+                            url = repo_url + url
                         
-            except requests.exceptions.Timeout:
-                raise # Lemparkan Timeout agar masuk blacklist
-            except Exception:
-                continue
+                        abstract = result.get_text(strip=True)
+                        
+                        if len(abstract) > 50:
+                            urls_found.append(url)
+                            texts_found.append(abstract[:500])
                 
+                if urls_found:
+                    break  # Found results, no need to try other patterns
+                    
+        except requests.exceptions.Timeout:
+            raise # Lemparkan Timeout agar masuk blacklist
+        except Exception:
+            continue
+            
     return urls_found, texts_found
 
 def google_site_search_fallback(repo_url, query, max_results=5):
