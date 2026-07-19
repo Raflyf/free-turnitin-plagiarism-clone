@@ -53,7 +53,7 @@ def process_document(file_id, filepath, original_filename, exclude_quotes=True, 
             set_progress(pct, f"Mencari web ({completed}/{total})...")
             
         print(f"[!] Mencari kandidat dari web (Mode Hybrid: 75 Fingerprints Skripsi)...")
-        urls, preloaded_corpus = get_candidate_urls(sentences, max_probes=75, progress_cb=ddg_progress)
+        urls, preloaded_corpus = get_candidate_urls(sentences, max_probes=100, progress_cb=ddg_progress)
         
         def scrape_progress(completed, total, speed="0 KB/s"):
             pct = 40 + int((completed / total) * 40) # 40% to 80%

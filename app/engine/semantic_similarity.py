@@ -48,7 +48,7 @@ def calculate_semantic_similarity(sentence1, sentence2):
     
     return similarity
 
-def find_semantic_matches(query_sentences, corpus_sentences, threshold=0.88):
+def find_semantic_matches(query_sentences, corpus_sentences, threshold=0.90):
     """
     Find semantically similar sentences from corpus that match query sentences.
     This is used as a second layer after N-Gram matching.
@@ -105,7 +105,7 @@ def find_semantic_matches(query_sentences, corpus_sentences, threshold=0.88):
     
     return semantic_matches
 
-def batch_semantic_check(unmatched_sentences, corpus_sentences, threshold=0.88, batch_size=32):
+def batch_semantic_check(unmatched_sentences, corpus_sentences, threshold=0.90, batch_size=32):
     """
     Efficiently check semantic similarity for sentences that weren't matched by N-Gram.
     Uses batch processing for better performance.

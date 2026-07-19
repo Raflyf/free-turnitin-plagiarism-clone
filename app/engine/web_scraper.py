@@ -98,7 +98,7 @@ def fetch_semantic_scholar(probe):
         params = {
             "query": short_probe,
             "limit": 5,
-            "fields": "title,abstract,url"
+            "fields": "title,abstract,url,openAccessPdf"
         }
         s2_key = _next_s2_key()
         s2_headers = {"x-api-key": s2_key} if s2_key else {}
@@ -109,7 +109,12 @@ def fetch_semantic_scholar(probe):
                 p_url = paper.get('url') or f"https://semanticscholar.org/paper/{paper.get('paperId','')}"
                 abstract = paper.get('abstract') or ""
                 title = paper.get('title') or ""
-                
+
+                # Prioritaskan URL PDF langsung (full-text, bukan abstrak)
+                oa_pdf = paper.get('openAccessPdf')
+                if oa_pdf and oa_pdf.get('url'):
+                    p_url = oa_pdf['url']
+
                 combined_text = f"{title}. {abstract}"
                 if len(combined_text) > 50:
                     urls_found.append(p_url)
@@ -154,37 +159,41 @@ def fetch_crossref(probe):
     return urls_found, texts_found
 
 def fetch_openalex(probe):
-    """Mencari metadata jurnal via OpenAlex (Repositori Terbesar Dunia - 250 Juta+ Dokumen)"""
+    """Mencari full-text jurnal Indonesia via OpenAlex (250M+ Dokumen).
+    Upgrade v3.3: pakai filter fulltext.search + language:id + is_oa:true
+    untuk mendapat URL PDF langsung (bukan hanya abstrak metadata)."""
     urls_found = []
     texts_found = []
     try:
-        url = "https://api.openalex.org/works"
-        short_probe = " ".join(probe.split()[:15])
+        short_probe = " ".join(probe.split()[:10])
         params = {
-            "search": short_probe,
-            "per_page": 5,
+            "filter": f"language:id,open_access.is_oa:true,fulltext.search:{short_probe}",
+            "per_page": 10,
+            "select": "id,title,open_access,primary_location,abstract_inverted_index",
             "mailto": "research_turnitin_local@university.edu"
         }
-        res = requests.get(url, params=params, timeout=6)
+        res = requests.get("https://api.openalex.org/works", params=params, timeout=10)
         if res.status_code == 200:
             data = res.json()
             for work in data.get("results", []):
-                p_url = work.get('doi') or work.get('id')
-                abstract = work.get('abstract_inverted_index')
                 title = work.get('title') or ""
-                if p_url:
-                    urls_found.append(p_url)
-                    abstract_text = ""
-                    if abstract:
-                        word_index = []
-                        for word, positions in abstract.items():
-                            for pos in positions:
-                                word_index.append((pos, word))
-                        word_index.sort(key=lambda x: x[0])
-                        abstract_text = " ".join([w[1] for w in word_index])
-                    
-                    combined_text = title + " " + abstract_text
-                    texts_found.append(combined_text.strip())
+                loc = work.get('primary_location') or {}
+                pdf_url = (work.get('open_access') or {}).get('oa_url') or \
+                          (loc.get('pdf_url')) or \
+                          (loc.get('landing_page_url'))
+                if not pdf_url:
+                    continue
+                urls_found.append(pdf_url)
+                abstract = work.get('abstract_inverted_index')
+                abstract_text = ""
+                if abstract:
+                    word_index = []
+                    for word, positions in abstract.items():
+                        for pos in positions:
+                            word_index.append((pos, word))
+                    word_index.sort(key=lambda x: x[0])
+                    abstract_text = " ".join([w[1] for w in word_index])
+                texts_found.append((title + " " + abstract_text).strip())
     except Exception as e:
         print(f"[!] OpenAlex API error: {e}")
     return urls_found, texts_found
@@ -229,13 +238,14 @@ def fetch_google_web(probe):
         import urllib.parse
         short_probe = " ".join(probe.split()[:15])
         
-        import random
+        import hashlib
         # Potong jadi 8 kata saja. 15 kata terlalu spesifik untuk search engine dan berujung 0 hasil
         short_probe = " ".join(probe.split()[:8])
-        rand_val = random.random()
-        if rand_val < 0.33:
+        # DETERMINISME: varian query dari hash stabil probe (bukan random tanpa seed).
+        variant = int(hashlib.md5(short_probe.encode("utf-8")).hexdigest(), 16) % 3
+        if variant == 0:
             query = urllib.parse.quote(f'{short_probe} site:ac.id')
-        elif rand_val < 0.66:
+        elif variant == 1:
             query = urllib.parse.quote(f'{short_probe} filetype:pdf')
         else:
             query = urllib.parse.quote(short_probe)
@@ -319,80 +329,51 @@ def fetch_ddgs(probe):
         # Ekstraksi PDF sangat rawan typo (spasi hilang, dsb). Exact match mutlak sering berujung 0 hasil.
         # Kita gunakan Fuzzy Search di Search Engine dengan potongan 8 kata (standar Turnitin), bukan 15 kata!
         short_probe = " ".join(probe.split()[:8])
-        
-        import random
-        # 4 Variasi Dorking DuckDuckGo dengan Prioritas BSI
-        rand_val = random.random()
-        if rand_val < 0.25:
-            # PRIORITAS TERTINGGI: Repository BSI dan kampus Indonesia
-            query = f'{short_probe} (site:repository.bsi.ac.id OR site:ejurnal.seminar-id.com OR site:repository.umsu.ac.id OR site:etheses.uin-malang.ac.id)'
-        elif rand_val < 0.50:
-            query = f'{short_probe} (jurnal OR repository OR skripsi OR site:garuda.kemdikbud.go.id)'
-        elif rand_val < 0.75:
+
+        import random, hashlib
+        # DETERMINISME: pilih varian query berdasarkan hash STABIL probe. Python hash()
+        # bawaan di-randomisasi per-proses (PYTHONHASHSEED) sehingga TIDAK reproducible
+        # antar run; hashlib.md5 stabil. Probe sama -> varian sama -> korpus reproducible.
+        # Ini syarat agar skor bisa dikalibrasi & dipertanggungjawabkan.
+        variant = int(hashlib.md5(short_probe.encode("utf-8")).hexdigest(), 16) % 4
+        if variant == 0:
+            # PRIORITAS TERTINGGI: repositori indeks-besar (paling mungkin full-text)
+            query = f'{short_probe} (site:123dok.com OR site:repository.bsi.ac.id OR site:etheses.uin-malang.ac.id OR site:doku.pub)'
+        elif variant == 1:
+            query = f'{short_probe} (jurnal OR repository OR skripsi OR eprints)'
+        elif variant == 2:
             query = f'{short_probe} site:ac.id'
         else:
             query = short_probe
-            
-        # Ambil 20 hasil teratas untuk disortir dengan prioritas
-        results = ddgs.text(query, max_results=20)
-        
-        # SISTEM PRIORITAS BERTINGKAT (semakin tinggi semakin prioritas)
-        tier1_urls = []  # BSI dan kampus prioritas
-        tier2_urls = []  # Repositori dan jurnal akademik Indonesia
-        tier3_urls = []  # Situs akademik umum
-        normal_urls = []  # Situs non-akademik
-        
+
+        # Ambil 25 hasil teratas untuk disortir dengan prioritas domain.
+        # Backend 'auto' sering rotasi ke endpoint html.duckduckgo.com yang cert-nya
+        # mismatch saat rate-limited (SSL CERTIFICATE_VERIFY_FAILED) -> 0 hasil & recall
+        # hilang. Pin ke 'lite' (paling stabil), fallback berurutan bila kosong/gagal.
+        results = []
+        for backend in ("lite", "html", "auto"):
+            try:
+                results = ddgs.text(query, max_results=25, backend=backend)
+                if results:
+                    break
+            except Exception:
+                continue
+
+        # SISTEM PRIORITAS via priority_domains.domain_priority (repositori akademik
+        # Indonesia diutamakan). Skor tetap dari overlap nyata; ini hanya urutan crawl.
+        try:
+            from .priority_domains import domain_priority
+        except ImportError:
+            from priority_domains import domain_priority
+
+        scored = []
         for res in list(results):
-            if 'href' in res:
-                url = res['href'].lower()
-                
-                # TIER 1: Repository BSI dan kampus prioritas Indonesia
-                tier1_keywords = [
-                    'repository.bsi.ac.id', 'ejurnal.seminar-id.com', 
-                    'repository.umsu.ac.id', 'etheses.uin-malang.ac.id',
-                    'ejournal.itn.ac.id', 'eprints.undip.ac.id',
-                    'repository.uinjkt.ac.id', 'eprints.uns.ac.id'
-                ]
-                if any(kw in url for kw in tier1_keywords):
-                    tier1_urls.append(res['href'])
-                    continue
-                
-                # TIER 2: Repositori dan jurnal akademik Indonesia
-                tier2_keywords = [
-                    'repository', 'repositori', 'eprints', 'etheses', 
-                    'digilib', 'ejurnal', 'jurnal', 'dspace',
-                    'garuda.kemdikbud.go.id', 'sinta.kemdikbud.go.id'
-                ]
-                if any(kw in url for kw in tier2_keywords) and '.ac.id' in url:
-                    tier2_urls.append(res['href'])
-                    continue
-                
-                # TIER 3: Situs akademik umum
-                tier3_keywords = [
-                    '.ac.id', '.edu', 'scholar', 'researchgate', 
-                    'core.ac.uk', 'doaj.org', '123dok', 'scribd'
-                ]
-                if any(kw in url for kw in tier3_keywords):
-                    tier3_urls.append(res['href'])
-                else:
-                    normal_urls.append(res['href'])
-        
-        # Gabungkan dengan prioritas: Tier1 (max 4) -> Tier2 (max 3) -> Tier3 (max 2) -> Normal (sisa)
-        final_urls = tier1_urls[:4]
-        remaining = 10 - len(final_urls)
-        
-        if remaining > 0:
-            final_urls.extend(tier2_urls[:min(3, remaining)])
-            remaining = 10 - len(final_urls)
-        
-        if remaining > 0:
-            final_urls.extend(tier3_urls[:min(2, remaining)])
-            remaining = 10 - len(final_urls)
-        
-        if remaining > 0:
-            final_urls.extend(normal_urls[:remaining])
-            
-        urls_found.extend(final_urls)
+            if 'href' in res and res['href'].startswith('http'):
+                scored.append((domain_priority(res['href']), res['href']))
+
+        # Urutkan prioritas tertinggi dulu; ambil 12 teratas (naik dari 10 demi recall).
+        scored.sort(key=lambda x: x[0], reverse=True)
+        urls_found.extend([u for _, u in scored[:12]])
         time.sleep(random.uniform(0.5, 1.5))
     except Exception as e:
         print(f"[!] Warning: API/Scraper error -> {e}")
@@ -586,7 +567,7 @@ def fetch_probe_multi(probe):
     
     return preloaded, normal_urls
 
-def get_candidate_urls(sentences, max_probes=75, progress_cb=None):
+def get_candidate_urls(sentences, max_probes=100, progress_cb=None):
     """
     Fungsi ini kini mengembalikan dua hal:
     1. urls (List URL web biasa untuk discrape manual)

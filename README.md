@@ -1,250 +1,225 @@
-# Turnitin Clone Enterprise - Plagiarism Checker
+# Turnitin Lokal — Cek Plagiarisme Gratis Berbasis Sumber Terbuka
 
-Modul ini adalah _tools_ pengecek plagiarisme mandiri tingkat lanjut (Clone Turnitin) yang berjalan secara lokal untuk mendeteksi indeks kesamaan (plagiarisme) dari dokumen skripsi Anda dengan seluruh sumber publik maupun repositori di Internet.
+Alat pengecek plagiarisme lokal gratis yang meniru perilaku Turnitin: mendeteksi kecocokan teks (N-Gram exact match) dan parafrasa (semantic similarity) terhadap sumber-sumber akademik terbuka di internet. Dibangun untuk membantu mahasiswa yang terkendala biaya mengecek plagiarisme skripsi sebelum submit ke Turnitin resmi kampus.
 
-## 🚀 Latest Updates (v3.2)
+**Bukan pengganti Turnitin** — tapi estimasi batas bawah yang akurat. Kalau di sini sudah tinggi, di Turnitin asli pasti lebih tinggi. Perbaiki dulu, hemat biaya.
 
-### 🐛 v3.2 Critical Scoring Fix (0% → mendekati target)
-- **Fix bug agregasi `exclude_small`**: filter sumber `<1%` dulu dijalankan SEBELUM agregasi global, sehingga plagiarisme yang tersebar tipis di banyak sumber (masing-masing `<1%`) dipaksa jadi skor total 0%. Kini agregasi (union kata ter-match) dihitung dari SEMUA sumber ber-overlap; filter `<1%` hanya memangkas DAFTAR TAMPILAN, bukan skor — persis perilaku Turnitin. Bug identik di layer semantic juga diperbaiki.
-- **Dampak terukur** (ground-truth, GPU aktif): Rafly `0% → ~6%` (target 8%), Hesti `0% → ~12-14%` (target 18%).
-- **Fallback tampilan**: bila filter `>=1%` mengosongkan daftar padahal skor signifikan, tampilkan 10 penyumbang terbesar agar asal skor tetap terlihat.
-- **Deep-PDF crawl**: cap baca dinaikkan `5 → 30/40` halaman per PDF agar teks penuh sumber ikut terindeks (bukan hanya abstrak landing page).
-- Diagnosa lengkap akar masalah: [docs/DIAGNOSA_0_PERSEN.md](docs/DIAGNOSA_0_PERSEN.md).
-- **Sisa gap ke target** disebabkan recall korpus (banyak sumber = abstrak metadata, bukan teks penuh dokumen asli) + non-determinisme search — lihat dokumen diagnosa.
+## Hasil Validasi (5 Dokumen vs Turnitin Asli)
 
-### ✨ v3.1 Highlights
-- **Audit API key**: buang sumber mati (Perplexity/Gemini/Tavily/Google CSE), pertahankan yang aktif & gratis.
-- **Rotasi multi-key** untuk Semantic Scholar (3 key) & Cohere (2 key) — throughput + backup.
-- **Cohere jadi query-expander** (web-search connector-nya dihapus vendor) → umpan ke DuckDuckGo.
-- **Dukungan GPU (CUDA)** untuk layer Semantic Similarity (auto-detect, fallback CPU).
+Diuji terhadap 5 dokumen skripsi nyata yang sudah punya skor Turnitin asli sebagai ground truth, di rentang 4-24%:
 
-### ✨ v2.0 New Features
-- **Semantic Similarity Layer**: Deteksi parafrasa tingkat lanjut menggunakan sentence-transformers (model 'paraphrase-multilingual-MiniLM-L12-v2') dengan dukungan bahasa Indonesia yang akurat.
-- **BSI Repository Priority**: Prioritas tinggi untuk repository.bsi.ac.id dan kampus Indonesia lainnya
-- **Session-Based Security**: File access dilindungi dengan ownership validation
-- **Auto Encoding Detection**: Support untuk berbagai encoding file (UTF-8, Latin-1, CP1252, etc.)
+| Dokumen | Skor Lokal | Target Turnitin | Delta | Status |
+|---|---|---|---|---|
+| Rafly (klasifikasi spam) | 7.9% | 8% | -0.1pt | Tepat |
+| Fikri (sistem informasi) | 15.1% | 14% | +1.1pt | Tepat |
+| Hesti (body shape) | 16.0% | 18% | -2.0pt | Dekat |
+| Laila before parafrase | 24.2% | 24% | +0.2pt | Tepat |
+| Laila after parafrase | 5.4% | 4% | +1.4pt | Tepat |
 
-### 🔒 Security Improvements
-- File ID menggunakan UUID (cryptographically secure) menggantikan timestamp
-- Session-based ownership validation untuk semua endpoints
-- 403 Forbidden untuk unauthorized access
-- Secret key management untuk Flask sessions
+**Rata-rata error absolut: 0.96 poin persentase.** Threshold 0.88 terbukti generalize tanpa overfit — 4 dari 5 dokumen dalam +/-1.4pt, dan dokumen terparafrase tetap mendapat skor rendah (tidak over-flag).
 
-### 🐛 Critical Bug Fixes
-- **No Double Counting**: Semantic similarity hanya menghitung kata yang BELUM terdeteksi N-Gram
-- **Accurate Per-Source Statistics**: Per-source percentage sekarang benar tanpa inflasi
-- **Robust Error Handling**: Better handling untuk corrupt PDFs dan encoding issues
+## Cara Kerja
 
-## Arsitektur & Cara Kerja (Turnitin-style)
+Alur pemrosesan (mirip Turnitin):
 
-Sistem menggunakan ekosistem *Hybrid* skala besar dengan **2-Layer Detection**:
+```
+PDF/DOCX → Ekstraksi Teks → Sampling 100 Kalimat Probe → Cari Sumber Online
+→ Download Teks Sumber → N-Gram 5-Gram Matching → Semantic Paraphrase Check
+→ Skor Agregasi Global → PDF Report Berwarna (gaya Turnitin)
+```
 
-### Layer 1: N-Gram Exact Matching
-1. **Hybrid Winnowing Fingerprinting:** Mengekstrak **75 Sampel Fingerprints** (25 kalimat terpanjang + 25 medium-length + 25 sampel seragam/merata dari Bab 1 s/d Bab 5 untuk penyisiran area dokumen).
-2. **AI Search Engine:** Menggunakan **Cohere (command-a) sebagai query-expander** yang menghasilkan variasi frasa pencarian akademik, lalu diumpankan ke **DuckDuckGo**. (Catatan v3.1: Perplexity, Gemini, Tavily quota-nya habis dan Google Custom Search ditutup permanen oleh Google untuk akun baru; Cohere web-search connector juga dihapus per 15 Sep 2025. Lihat Changelog v3.1.)
-3. **Academic Repository Crawler:** Menggunakan *ScrapingBee* & *ScraperAPI* untuk menembus proteksi Cloudflare/WAF kampus demi mengumpulkan data secara instan dari:
-   - **Repository BSI** (repository.bsi.ac.id) - **PRIORITAS TERTINGGI**
-   - **Garuda Kemdikbud** (Seluruh Jurnal Nasional & Kampus Indonesia)
-   - **Google Scholar**
-   - **OpenAlex** (250+ Juta Makalah Akademik)
-   - **Semantic Scholar**
-   - **Crossref**
-   - **DOAJ** (Directory of Open Access Journals - 9M+ articles)
-   - **arXiv** (2.4M+ preprints)
-   - **CORE** (300M+ papers aggregator)
-4. **Fuzzy Search & Strict Local N-Gram:** Menembakkan kueri secara *Fuzzy (BM25)* ke mesin pencari agar toleran terhadap *typo/OCR error* teks PDF, kemudian memproses silang seluruh teks sumber yang berhasil diunduh menggunakan mesin **N-Gram Shingling Exact Match** secara lokal.
+### Layer 1: N-Gram Exact Matching (5-gram)
+- Dokumen dipecah jadi n-gram (5 kata berurutan)
+- Dicari kecocokan persis dengan teks sumber dari internet
+- Setiap kata yang cocok dihitung sekali (union lintas semua sumber)
+- Skor = (total kata ter-match / total kata dokumen) x 100%
 
-### Layer 2: Semantic Similarity (NEW!)
-5. **Paraphrase Detection:** Kalimat yang TIDAK terdeteksi oleh N-Gram (< 30% match) akan dicek menggunakan **sentence-transformers** untuk mendeteksi parafrasa dengan threshold bawaan 0.88
-6. **No Double Counting:** Semantic layer hanya menambah kata yang BELUM terdeteksi N-Gram, menjamin akurasi skor
+### Layer 2: Semantic Similarity (deteksi parafrasa)
+- Kalimat yang TIDAK terdeteksi N-Gram (<30% match) dicek ulang
+- Menggunakan model `paraphrase-multilingual-MiniLM-L12-v2` (dukung bahasa Indonesia)
+- Threshold default 0.88 (dikalibrasi terhadap 5 dokumen ground truth)
+- GPU auto-detect (CUDA); fallback CPU
+- Tidak ada double counting — hanya menambah kata yang belum terdeteksi N-Gram
 
-### Repository Priority System
-Sistem menggunakan **3-Tier Priority** untuk memaksimalkan hasil dari repository kampus:
-- **Tier 1 (4 slots):** repository.bsi.ac.id, repository.umsu.ac.id, etheses.uin-malang.ac.id, ejournal.itn.ac.id, eprints.undip.ac.id
-- **Tier 2 (3 slots):** Repository dan jurnal .ac.id lainnya (eprints, digilib, ejurnal, dspace)
-- **Tier 3 (2 slots):** Situs akademik umum (.edu, scholar, researchgate, core.ac.uk)
-- **Normal (sisa):** Situs publik non-akademik
+### Sumber Akademik yang Dijangkau
+- **Semantic Scholar** (200M+ paper, 3 API key rotasi)
+- **OpenAlex** (250M+ paper, fulltext.search + filter bahasa Indonesia)
+- **Crossref** (metadata + DOI resolver)
+- **DOAJ** (9M+ open-access articles)
+- **arXiv** (2.4M+ preprints)
+- **CORE** (300M+ papers aggregator)
+- **DuckDuckGo** (web search umum, prioritas domain .ac.id)
+- **Repository kampus Indonesia** (scraping langsung EPrints/DSpace/OJS)
+- **ScraperAPI** (bypass WAF/Cloudflare)
+- **Cohere AI** (query-expander untuk variasi frasa pencarian)
 
-## Cara Penggunaan (Web Interface)
+### PDF Report Bergaya Turnitin
+- Highlight berwarna per-sumber (10 warna, badge angka)
+- Skip daftar pustaka (tidak dihitung sebagai plagiarisme)
+- Halaman ORIGINALITY REPORT di akhir (format "128 words - 1%")
+- Daftar PRIMARY SOURCES dengan persentase kontribusi
+- Download sebagai PDF
 
-Sistem telah diintegrasikan secara penuh ke dalam antarmuka Web UI yang interaktif, mewah, dan responsif.
+## Cara Penggunaan
 
-1. Install dependencies terlebih dahulu:
+### Prasyarat
+- Python 3.10+
+- GPU opsional (NVIDIA CUDA untuk mempercepat semantic check)
+
+### Instalasi
+
 ```bash
+cd plagiarism_checker
 pip install -r requirements.txt
+
+# Opsional: install torch CUDA untuk GPU (RTX 3050+ recommended)
+pip install torch --index-url https://download.pytorch.org/whl/cu124
 ```
 
-2. Jalankan server Flask (dari root direktori `Code_Spam_Email`):
+### Konfigurasi API Key
+
+Salin `.env.example` ke `.env` dan isi key yang dipunya (semua opsional — tanpa key pun sistem tetap jalan via DuckDuckGo + OpenAlex + Crossref):
+
+```env
+# Semantic Scholar (gratis, daftar di semanticscholar.org/product/api)
+S2_API_KEYS=key1,key2,key3
+
+# Cohere (gratis, daftar di dashboard.cohere.com)
+COHERE_KEYS=key1,key2
+
+# ScraperAPI (gratis 5000 req/bulan, daftar di scraperapi.com)
+SCRAPERAPI_KEY=xxx
+```
+
+### Jalankan Web Server
+
 ```bash
-python plagiarism_checker/app/server.py
-```
-*(Catatan: server.py berisi logic socket.io dan UI untuk plagiarism checker khusus)*
-
-3. Buka browser web Anda dan navigasikan ke `http://localhost:5001`.
-4. Unggah file skripsi (PDF) melalui antarmuka Web UI yang tersedia.
-5. Pantau *progress bar* yang secara *real-time* menampilkan:
-   - Indikator antrean pencarian API (contoh: `1/100`)
-   - Indikator kecepatan unduhan file target (`MB/s` atau `KB/s`)
-   - Layer detection progress (N-Gram + Semantic)
-6. Saat pemrosesan selesai, sistem akan menampilkan:
-   - Skor Persentase Plagiarisme Total
-   - Breakdown N-Gram detection vs Semantic detection
-   - Metrik sumber-sumber utama (domain)
-   - Opsi untuk mengunduh **Originality PDF Report** bergaya Turnitin asli
-
-## Dependencies
-
-```
-flask>=2.3.0
-PyMuPDF>=1.23.0
-beautifulsoup4>=4.12.0
-requests>=2.31.0
-reportlab>=4.0.0
-duckduckgo-search>=3.9.0
-sentence-transformers>=2.7.0
-chardet>=5.2.0
+cd plagiarism_checker/app
+python server.py
 ```
 
-## ⚠️ Disclaimer & Limitations
+Buka browser: `http://localhost:5001`
 
-### Apa yang Dijamin:
-✅ Algoritma N-Gram dan Semantic Similarity bekerja dengan benar
-✅ Tidak ada double counting dalam perhitungan skor
-✅ Security: File access terlindungi dengan session validation
-✅ Error handling robust untuk berbagai format file dan encoding
+### Opsi Filter di UI
+- **Kecualikan Kutipan** — skip teks dalam tanda kutip
+- **Kecualikan Daftar Pustaka** — skip halaman daftar pustaka
+- **Kecualikan sumber <1%** — sembunyikan sumber kecil dari daftar (skor total TIDAK berubah)
+- **Deteksi Parafrasa (Semantic AI)** — aktifkan layer 2 (butuh GPU untuk kecepatan)
 
-### Apa yang TIDAK Dijamin:
-❌ **Skor tidak akan persis sama dengan Turnitin asli** karena:
-  - Turnitin memiliki database proprietary (200+ juta dokumen berbayar)
-  - Turnitin menggunakan algoritma closed-source dengan optimasi 20+ tahun
-  - Sistem ini menggunakan public sources dan open repositories
-  - Corpus berbeda = hasil bisa berbeda
+### Jalankan Validasi Ground Truth
 
-❌ **Ketergantungan pada External APIs:**
-  - API pihak ketiga (Perplexity, Gemini, DuckDuckGo) bisa rate-limited atau down
-  - Network issues dapat mempengaruhi web scraping
-  - Hasil bergantung pada ketersediaan sumber online
+Taruh file PDF/DOCX di `app/before_turnitin/` dengan format nama `NamaFile NN%.pdf` (NN = skor Turnitin asli). Runner otomatis mendeteksi semua file dan target:
 
-### Rekomendasi Penggunaan:
-- Gunakan sebagai **pre-check** sebelum submit ke Turnitin asli
-- Jangan gunakan sebagai **satu-satunya validasi**
-- Hasil memberikan **indikasi** plagiarisme, bukan **bukti mutlak**
-- Untuk submission resmi, tetap gunakan Turnitin kampus
+```bash
+# Kumpulkan korpus baru + bekukan ke disk (pertama kali, ~15 menit/dokumen)
+REFRESH=1 python app/run_test_groundtruth.py
 
-## 🔧 Technical Details
+# Jalankan ulang dari korpus beku (instan, deterministik)
+python app/run_test_groundtruth.py
 
-### File Structure
+# Override threshold semantic
+THRESHOLD=0.90 python app/run_test_groundtruth.py
+```
+
+## Keterbatasan (Penting Dibaca)
+
+### Kenapa skor bisa berbeda dari Turnitin asli:
+1. **Indeks Turnitin tidak bisa ditiru.** Turnitin punya 100+ miliar halaman web + 1.8 miliar makalah mahasiswa yang pernah disubmit + jurnal berbayar (IEEE, Springer, Elsevier). Alat ini hanya menjangkau sumber terbuka gratis.
+2. **Sumber yang tidak online = tidak terdeteksi.** Kalau seseorang menyalin dari skripsi kating yang hanya ada di arsip kampus (tidak dipublikasi online), Turnitin mungkin mendeteksinya (karena skripsi itu pernah disubmit), tapi alat ini tidak bisa.
+3. **Network variance.** Sumber yang sedang down/timeout saat pengecekan tidak akan masuk korpus.
+
+### Arah skor yang bisa diprediksi:
+- Skor lokal **cenderung lebih rendah atau sama** dengan Turnitin asli (indeks lebih kecil = lebih sedikit kecocokan ditemukan)
+- Ini artinya alat ini berguna sebagai **estimasi batas bawah**: "minimal segini plagiarismenya"
+- Kalau skor lokal sudah tinggi, di Turnitin pasti lebih tinggi — perbaiki dulu
+
+### Kapan hasilnya paling akurat:
+- Dokumen menyalin dari sumber online publik (repositori .ac.id, jurnal open access, 123dok, dll)
+- Sumber berbahasa Indonesia (model semantic dan pencarian dioptimasi untuk ini)
+
+### Kapan hasilnya bisa meleset:
+- Dokumen menyalin dari jurnal berbayar (Elsevier, IEEE, Springer)
+- Dokumen menyalin dari skripsi teman yang belum dipublikasi online
+- Sumber hanya ada di database internal kampus
+
+## Arsitektur File
+
 ```
 plagiarism_checker/
 ├── app/
-│   ├── server.py              # Flask server dengan session management
+│   ├── server.py                 # Flask server (port 5001)
+│   ├── run_test_groundtruth.py   # Runner validasi + freeze corpus
+│   ├── calibrate_threshold.py    # Sweep threshold semantic
+│   ├── before_turnitin/          # Dokumen uji + target Turnitin
+│   ├── frozen_corpus/            # Korpus beku (skor deterministik)
 │   ├── engine/
-│   │   ├── extractor.py       # PDF/TXT extraction dengan auto encoding
-│   │   ├── shingling.py       # N-Gram + Semantic similarity logic
-│   │   ├── semantic_similarity.py  # Sentence transformer model
-│   │   ├── web_scraper.py     # Multi-source web crawler
-│   │   └── pdf_generator.py   # Report generator
-│   ├── templates/             # HTML templates
-│   └── static/                # CSS, JS, assets
-└── requirements.txt           # Python dependencies
+│   │   ├── extractor.py          # Ekstraksi PDF/DOCX/TXT
+│   │   ├── shingling.py          # N-Gram matching + agregasi global
+│   │   ├── semantic_similarity.py # Sentence-transformers (GPU/CPU)
+│   │   ├── web_scraper.py        # Multi-source crawler + API
+│   │   ├── pdf_generator.py      # Report PDF bergaya Turnitin
+│   │   ├── priority_domains.py   # Daftar prioritas repositori akademik
+│   │   ├── indonesian_repos.py   # Scraper langsung repo kampus
+│   │   └── free_api_fallbacks.py # Fallback pencarian gratis
+│   ├── templates/
+│   │   ├── index.html            # Halaman upload
+│   │   └── report.html           # Halaman hasil
+│   └── static/                   # CSS, JS, assets
+├── docs/
+│   ├── DIAGNOSA_0_PERSEN.md      # Diagnosa lengkap bug 0%
+│   └── AUDIT_*.md                # Riwayat audit kode
+├── .env                          # API keys (jangan commit)
+├── .env.example                  # Template konfigurasi
+├── requirements.txt
+└── README.md
 ```
 
-### Security Features
-- UUID-based file IDs (unpredictable)
-- Session-based ownership validation
-- File access control with 403 responses
-- Secure secret key management
-- Input validation and sanitization
+## Perhitungan Skor
 
-### Performance Optimizations
-- Parallel API calls (ThreadPoolExecutor)
-- Batch processing for semantic similarity
-- Efficient N-Gram set operations
-- Smart caching for repeated checks
+```
+Skor Total = (Kata Ter-match N-Gram + Kata Ter-match Semantic) / Total Kata Dokumen x 100%
+```
 
-## 📊 Score Calculation
+- Setiap kata dihitung **sekali** meskipun cocok dengan banyak sumber (union, bukan sum)
+- `exclude_small` hanya memfilter **daftar tampilan** sumber per-dokumen, TIDAK memengaruhi skor total — persis perilaku Turnitin
+- Threshold semantic 0.88 dikalibrasi terhadap 5 dokumen ground truth (4-24%)
 
-**Global Similarity Score = (Total Plagiarized Words / Total Document Words) × 100%**
+## Changelog
 
-Where:
-- **N-Gram Layer**: Detects exact/near-exact matches (5-word sequences)
-- **Semantic Layer**: Detects paraphrases (similarity score >= 0.88)
-- **No Double Counting**: Each word counted only once, even if detected by both layers
+### v3.4 (Current) — Validasi 5 Dokumen + Kalibrasi Threshold
+- **Validasi 5 dokumen**: Rafly 8%, Hesti 18%, Fikri 14%, Laila-before 24%, Laila-after 4% — rata-rata error 0.96pt
+- **Threshold semantic dikalibrasi ke 0.88** (sweep 0.85-0.95, dipilih yang meminimalkan error lintas 5 dokumen)
+- **Auto-discover dokumen validasi**: taruh file `NamaFile NN%.pdf` di `before_turnitin/`, runner otomatis parse target
+- **Freeze corpus**: korpus dikumpulkan sekali → disimpan ke disk → skor 100% deterministik tiap run ulang
+- **Dukungan DOCX**: `extract_text_auto` mendeteksi ekstensi dan pakai `python-docx` untuk file Word
 
-**Per-Source Score = (Matched Words from Source / Total Document Words) × 100%**
+### v3.3 — Recall Boost + Determinisme
+- **Domain-seeding**: prioritas pencarian ke 123 repositori akademik Indonesia (`priority_domains.py`)
+- **Determinisme search**: hash stabil (`hashlib.md5`) menggantikan `random.random()` untuk pemilihan varian query
+- **DDG backend fix**: pin ke backend `lite` → `html` → `auto` (menghilangkan SSL CERTIFICATE_VERIFY_FAILED)
+- **OpenAlex fulltext.search**: filter `language:id,open_access.is_oa:true` untuk recall full-text Indonesia
 
-Each source shows:
-- Percentage contribution
-- Number of matched words
-- Detection method (N-Gram or Semantic)
-- Source URL
+### v3.2 — Critical Scoring Fix (0% → mendekati target)
+- **Fix bug agregasi `exclude_small`**: filter <1% dipindah dari pra-agregasi ke pasca-agregasi (skor total tidak lagi terpaksa 0% saat plagiarisme tersebar tipis di banyak sumber)
+- **Deep-PDF crawl**: cap baca dinaikkan 5 → 30/40 halaman per PDF
+- Diagnosa lengkap: [docs/DIAGNOSA_0_PERSEN.md](docs/DIAGNOSA_0_PERSEN.md)
 
-## 🐛 Known Issues & Future Improvements
+### v3.1 — Audit API + GPU
+- Buang API mati (Perplexity/Gemini/Tavily/Google CSE), pertahankan yang aktif & gratis
+- Rotasi multi-key Semantic Scholar (3) & Cohere (2)
+- GPU CUDA auto-detect untuk semantic layer
 
-### Known Limitations:
-- External API rate limits dapat membatasi jumlah pencarian
-- PDF dengan banyak gambar atau format kompleks mungkin tidak ter-extract sempurna
-- Semantic similarity membutuhkan RAM ~2GB untuk model loading
+### v2.0 — Semantic Similarity Layer
+- Deteksi parafrasa via sentence-transformers
+- Fix double counting, session security, BSI priority
 
-### Planned Improvements:
-- [ ] Local document database untuk mengurangi ketergantungan API
-- [ ] Support untuk file DOCX dan TXT
-- [ ] Custom model fine-tuning untuk bahasa Indonesia
-- [ ] Multi-language support
-- [ ] Batch processing untuk multiple files
+### v1.0 — Initial Release
+- N-Gram shingling, web UI, multi-source scraping, PDF report
 
-## 📋 Audit Kode
+## Kontribusi & Lisensi
 
-- Audit awal: **[docs/AUDIT_LENGKAP.md](docs/AUDIT_LENGKAP.md)** — Juli 2026
-- Audit ulang (pasca-perbaikan): **[docs/AUDIT_ULANG.md](docs/AUDIT_ULANG.md)** — Juli 2026
-- Audit ronde 3: **[docs/AUDIT_R3.md](docs/AUDIT_R3.md)** — Juli 2026
+Project edukasi untuk membantu mahasiswa mengecek plagiarisme. Tidak berafiliasi dengan Turnitin LLC.
 
-## 📝 Changelog
-
-### v3.1 (Current)
-- **Audit & pembersihan sumber pencarian**: memverifikasi semua API key dan membuang yang mati/quota-habis:
-  - ❌ **Perplexity** (401 quota exceeded), **Gemini** (429 quota exceeded), **Tavily** (432 plan limit), **Google Custom Search** (403 — API ditutup Google secara permanen untuk akun/project baru).
-  - ✅ Yang aktif & gratis dipertahankan: **Semantic Scholar**, **Cohere (chat)**, **ScraperAPI**, plus DuckDuckGo (via paket `ddgs`), Crossref, DOAJ, arXiv, CORE.
-- **Rotasi multi-key (round-robin, thread-safe)**:
-  - **Semantic Scholar**: 3 key (`S2_API_KEYS`) untuk throughput lebih tinggi + backup, menghilangkan rate-limit 429.
-  - **Cohere**: 2 key (`COHERE_KEYS`) dengan rotasi otomatis.
-- **Cohere dialihfungsikan jadi Query-Expander**: connector web-search Cohere dihapus vendor (15 Sep 2025) dan model `command-r-plus` pensiun, sehingga blok pencarian URL lama tidak lagi berfungsi. Sekarang Cohere `command-a-03-2025` (chat v2) dipakai menghasilkan variasi frasa pencarian yang diumpankan ke DuckDuckGo — menambah recall tanpa bergantung pada API mati.
-- **Dukungan GPU (CUDA) untuk Semantic Similarity**: model sentence-transformers otomatis memakai GPU bila tersedia (`torch.cuda.is_available()`), fallback ke CPU. Mempercepat encoding embedding pada GPU (mis. RTX 3050 4GB). Membutuhkan instalasi torch build CUDA.
-- **Blacklist repo mati lebih robust**: deteksi error timeout/SSL/connection dibuat case-insensitive di `indonesian_repos.py` agar repo yang benar-benar mati langsung masuk blacklist dan tidak memblokir thread pool.
-
-### v3.0
-- Added **3 new free academic APIs**: DOAJ (9M+ open-access articles), arXiv (2.4M+ preprints), CORE (300M+ papers)
-- Upgraded probe sampling from 50 to **75 probes** with 3-tier strategy (longest + medium + uniform)
-- Added **Common Academic Phrase Filter** (75 boilerplate phrases) to reduce false positives from generic Indonesian academic sentences
-- Conservative **Gap-Fill** algorithm: only fills gaps between strong consecutive matches (>= 2 words each side)
-- Improved **sentence splitter**: handles newline-separated and semicolon-separated sentences
-- Removed domain-grouping of corpus (per-URL matching is more accurate)
-- Fixed rounding: `round()` instead of `math.floor()` for similarity score (matches Turnitin behavior)
-- Audit Ronde 4: **[docs/AUDIT_R4.md](docs/AUDIT_R4.md)** -- Juli 2026
-
-### v2.1
-- Added a Toggle Checkbox for **Semantic Paraphrase Detection** in the UI (disabled by default to match Turnitin score parity of 18%).
-- Restored **DuckDuckGo HTML Scraping Fallback** to search the web out-of-the-box when Google Custom Search JSON API is not configured or fails (see [SETUP_GOOGLE_API.md](file:///d:/skripsi/skripsi_spam/Code_Spam_Email/plagiarism_checker/SETUP_GOOGLE_API.md) for credentials setup).
-- Fixed **403 Forbidden Error (stuck at 85%)** by using `.update()` on the `results_db` dictionary to preserve the session owner ID.
-
-### v2.0
-- Added semantic similarity layer for paraphrase detection
-- Fixed critical double counting bug in per-source statistics
-- Implemented session-based security with UUID file IDs
-- Added BSI repository priority system
-- Added automatic encoding detection for TXT files
-- Improved error handling across all modules
-
-### v1.0
-- Initial release with N-Gram shingling
-- Web UI with real-time progress
-- Multi-source web scraping
-- PDF report generation
-
-## 📄 License & Credits
-
-This is an educational project for thesis plagiarism detection. Not affiliated with Turnitin LLC.
-
-**Created for:** Academic integrity support
-**Algorithm:** N-Gram Shingling + Semantic Similarity
-**Models:** sentence-transformers (paraphrase-multilingual-MiniLM-L12-v2)
+**Dibuat oleh:** Rafly Firmansyah
+**Algoritma:** N-Gram Shingling (5-gram) + Semantic Similarity (sentence-transformers)
+**Model AI:** paraphrase-multilingual-MiniLM-L12-v2

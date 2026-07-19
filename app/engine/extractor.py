@@ -44,6 +44,38 @@ def extract_text_from_pdf(filepath, exclude_quotes=True, exclude_biblio=True):
     
     return cleaned_text, manipulation_warnings
 
+def extract_text_from_docx(docx_path, exclude_quotes=True, exclude_biblio=True):
+    """Extract text from .docx (Word). Dipakai untuk dokumen sumber asli (bukan PDF hasil Turnitin)."""
+    from docx import Document
+    doc = Document(docx_path)
+    text = " ".join(p.text for p in doc.paragraphs if p.text)
+    # Sertakan teks dari tabel (banyak skripsi menaruh konten di tabel)
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                if cell.text:
+                    text += " " + cell.text
+    if not text.strip():
+        raise Exception("DOCX appears to be empty")
+
+    manipulation_warnings = detect_manipulation(text)
+    cleaned_text = clean_text(text, exclude_quotes, exclude_biblio)
+    cleaned_text = re.sub(r'[​-‍﻿]', '', cleaned_text)
+    cyrillic_to_latin = str.maketrans('асеорху', 'aceopxy')
+    cleaned_text = cleaned_text.translate(cyrillic_to_latin)
+    return cleaned_text, manipulation_warnings
+
+
+def extract_text_auto(filepath, exclude_quotes=True, exclude_biblio=True):
+    """Deteksi ekstensi lalu ekstrak (.pdf/.docx/.txt). Satu pintu untuk semua format."""
+    low = filepath.lower()
+    if low.endswith(".docx"):
+        return extract_text_from_docx(filepath, exclude_quotes, exclude_biblio)
+    if low.endswith(".txt"):
+        return extract_text_from_txt(filepath), []
+    return extract_text_from_pdf(filepath, exclude_quotes, exclude_biblio)
+
+
 def extract_text_from_txt(txt_path):
     """Extract text from TXT with automatic encoding detection"""
     try:
