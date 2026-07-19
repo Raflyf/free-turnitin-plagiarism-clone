@@ -208,10 +208,11 @@ def calculate_similarity(doc_text, corpus, exclude_small=False, use_semantic=Fal
                     
         matched_word_count = sum(is_matched_source)
         percentage = (matched_word_count / total_doc_words) * 100.0
-        
-        if exclude_small and percentage < 1.0:
-            continue
-            
+
+        # PENTING: JANGAN buang sumber <1% di sini. Turnitin menghitung skor total dari
+        # GABUNGAN (union) kata ter-match lintas SEMUA sumber, lalu memfilter <1% hanya
+        # pada DAFTAR TAMPILAN. Membuang di sini (sebelum agregasi) memaksa skor total ke
+        # 0% saat plagiarisme tersebar tipis di banyak sumber (masing-masing <1%).
         if percentage > 0:
             sources_report[url] = {
                 'percentage': float(percentage),
@@ -224,9 +225,10 @@ def calculate_similarity(doc_text, corpus, exclude_small=False, use_semantic=Fal
     # Urutkan berdasarkan persentase tertinggi
     sorted_sources = sorted(list(sources_report.values()), key=lambda x: x['sort_score'], reverse=True)
     top_sources = sorted_sources[:20] # Ambil 20 sumber teratas
-    
+
     # 3. Agregasi Keseluruhan (Overall Similarity Index)
     # Turnitin menghitung indeks total dari GABUNGAN semua kata yang plagiat dari SUMBER MANAPUN.
+    # Agregasi dari SELURUH sumber ber-overlap (bukan hanya yang lolos filter tampilan).
     global_overlap_ngrams = set()
     for s in sorted_sources:
         global_overlap_ngrams.update(s['overlap_ngrams'])
@@ -404,21 +406,29 @@ def calculate_similarity(doc_text, corpus, exclude_small=False, use_semantic=Fal
                     ) * 100.0
                     sources_report[source_url]['sort_score'] = sources_report[source_url]['percentage']
             
-            # === FINAL FILTERING (Mencegah Skor Terlalu Tinggi karena Noise) ===
-            # Jika exclude_small aktif, buang sumber yang TOTAL kontribusinya < 1.0%
+            # === AGREGASI GLOBAL SEMANTIC (union lintas SEMUA sumber) ===
+            # PENTING: skor total = union kata ter-match dari sumber MANAPUN, seperti
+            # Turnitin. exclude_small TIDAK boleh membuang kontribusi ke is_matched_global;
+            # ia hanya memangkas DAFTAR TAMPILAN per-sumber (lihat filter di bawah).
+            for match_data in semantic_matches_temp:
+                semantic_plagiarized_words += match_data['newly_detected_words']
+                for word_idx in range(match_data['sent_start'], match_data['sent_end']):
+                    if word_idx < len(is_matched_global):
+                        is_matched_global[word_idx] = True
+
+            # === FINAL FILTERING (hanya untuk DAFTAR TAMPILAN, bukan skor total) ===
+            # Buang sumber yang TOTAL kontribusinya < 1.0% dari laporan per-sumber saja.
             dropped_source_urls = set()
             if exclude_small:
                 filtered_sources_report = {}
-                
                 for url, s_data in sources_report.items():
                     if s_data['percentage'] >= 1.0:
                         filtered_sources_report[url] = s_data
                     else:
                         dropped_source_urls.add(url)
-                        
                 sources_report = filtered_sources_report
-                
-                # Filter array plagiarized_sentences_data dari sumber yang dibuang
+
+                # Rapikan array highlight dari sumber yang tak lagi tampil di daftar
                 if dropped_source_urls:
                     surviving_sentences = []
                     for sent_data in plagiarized_sentences_data:
@@ -426,15 +436,7 @@ def calculate_similarity(doc_text, corpus, exclude_small=False, use_semantic=Fal
                             surviving_sentences.append(sent_data)
                     plagiarized_sentences_data = surviving_sentences
 
-            # Update is_matched_global hanya dari sumber semantic yang LOLOS filter
-            for match_data in semantic_matches_temp:
-                if match_data['source_url'] not in dropped_source_urls:
-                    semantic_plagiarized_words += match_data['newly_detected_words']
-                    for word_idx in range(match_data['sent_start'], match_data['sent_end']):
-                        if word_idx < len(is_matched_global):
-                            is_matched_global[word_idx] = True
-
-            # Recalculate total similarity dengan semantic results yang sudah bersih dari noise
+            # Recalculate total similarity (union penuh, tidak terpengaruh exclude_small)
             total_plagiarized_words_global = sum(is_matched_global)
                 
             # Sort ulang sources dengan semantic results
@@ -444,10 +446,23 @@ def calculate_similarity(doc_text, corpus, exclude_small=False, use_semantic=Fal
     # Hitung ulang total similarity secara global
     # (Bila kita benar-benar drop words, sum(is_matched_global) akan turun)
     total_similarity = float((sum(is_matched_global) / total_doc_words) * 100.0)
-    
+
+    # FILTER TAMPILAN (bukan agregasi): daftar sumber yang dikembalikan hanya memuat
+    # sumber >=1% agar tabel bersih. Ini dilakukan SETELAH total_similarity dihitung,
+    # jadi TIDAK memengaruhi skor total (yang tetap dari union penuh is_matched_global).
+    display_sources = sorted_sources
+    if exclude_small:
+        display_sources = [s for s in sorted_sources if s['percentage'] >= 1.0]
+        # FALLBACK: jika filter >=1% mengosongkan daftar padahal skor total signifikan
+        # (plagiarisme tersebar tipis di banyak sumber), tampilkan 10 penyumbang terbesar
+        # agar user tetap melihat asal skor. Tanpa ini, "9% tapi 0 sumber" tampak seperti bug.
+        if not display_sources and total_similarity >= 1.0:
+            display_sources = sorted_sources[:10]
+
     print(f"\n[!] ===== DETECTION SUMMARY =====")
     print(f"[!] N-Gram similarity: {ngram_similarity:.2f}%")
     print(f"[!] Semantic additional detection: {(semantic_plagiarized_words / total_doc_words * 100):.2f}%")
     print(f"[!] Total similarity (combined): {total_similarity:.2f}%")
-    
-    return sorted_sources, total_similarity, plagiarized_sentences_data
+    print(f"[!] Sumber ditampilkan (>=1%): {len(display_sources)} dari {len(sorted_sources)} sumber ber-overlap")
+
+    return display_sources, total_similarity, plagiarized_sentences_data

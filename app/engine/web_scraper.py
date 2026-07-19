@@ -891,7 +891,11 @@ def scrape_url(url):
                 import io
                 doc = fitz.open(stream=res.content, filetype="pdf")
                 text = ""
-                for page in doc:
+                # Direct-PDF: baca hingga 40 halaman (lebih tinggi dari deep-crawl karena
+                # link langsung = kandidat sumber utama), tapi tetap dibatasi agar tidak
+                # nyangkut di PDF ratusan halaman.
+                for page_num, page in enumerate(doc):
+                    if page_num >= 40: break
                     text += page.get_text() + " "
                 text = re.sub(r'\s+', ' ', text).strip()
                 return url, text, total_bytes
@@ -935,9 +939,12 @@ def scrape_url(url):
                             # Verifikasi apakah benar-benar PDF (Magic number %PDF)
                             if 'application/pdf' in pdf_res.headers.get('Content-Type', '').lower() or pdf_res.content.startswith(b'%PDF'):
                                 pdf_doc = fitz.open(stream=pdf_res.content, filetype="pdf")
-                                # Hanya baca 5 halaman awal per PDF (Mencegah mesin nyangkut di PDF 300 halaman)
+                                # Baca hingga 30 halaman per PDF. Skripsi 60-100 halaman: 5 halaman
+                                # (versi lama) hanya menangkap cover+abstrak, sehingga isi Bab 2-4
+                                # yang paling sering diplagiat TIDAK ikut terindeks -> overlap 0.
+                                # Cap 30 halaman menyeimbangkan cakupan vs risiko nyangkut di PDF 300 hal.
                                 for page_num, page in enumerate(pdf_doc):
-                                    if page_num >= 5: break
+                                    if page_num >= 30: break
                                     pdf_text += page.get_text() + " "
                         except Exception as e:
                             print(f"[!] Warning: API/Scraper error -> {e}")
