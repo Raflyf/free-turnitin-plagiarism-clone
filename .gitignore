@@ -20,3 +20,11 @@ app/test_groundtruth_result.json
 
 # Tooling skill lokal (ribuan file, tidak perlu di-repo)
 .claude/
+
+# Config editor lokal (path absolut mesin, jangan di-commit)
+.vscode/
+
+# Helper script & config lokal (berisi path absolut mesin — jangan publish)
+run.bat
+run.sh
+.vscode/

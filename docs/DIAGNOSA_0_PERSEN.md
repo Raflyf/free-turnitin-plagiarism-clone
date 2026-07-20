@@ -9,11 +9,11 @@ Sistem ini adalah clone Turnitin lokal berbahasa Indonesia yang harus melaporkan
 Alur pemrosesan dari PDF hingga skor akhir, beserta file kunci tiap tahap (semua path absolut, forward-slash):
 
 1. **Input & Ekstraksi PDF**
-   - File: `D:/skripsi/skripsi_spam/Code_Spam_Email/plagiarism_checker/app/engine/extractor.py`
+   - File: `app/engine/extractor.py`
    - Fungsi: `extract_text_from_pdf`. Mengubah PDF (`before_turnitin/Rafly FIrmansyah - Skripsi_Fix.pdf`, `Hesti_skripsi_final_before_turnitin.pdf`) menjadi teks bersih. Output: Rafly 13099 kata, Hesti 8604 kata.
 
 2. **Akuisisi Search (retrieval kandidat sumber)**
-   - File: `D:/skripsi/skripsi_spam/Code_Spam_Email/plagiarism_checker/app/engine/web_scraper.py` (fungsi `fetch_ddgs` ~baris 306-399, `fetch_semantic_scholar`, `fetch_crossref`, `fetch_doaj`, `fetch_core`, `fetch_openalex`) dan `app/engine/free_api_fallbacks.py` (`search_with_fallbacks`, `get_cache_key`).
+   - File: `app/engine/web_scraper.py` (fungsi `fetch_ddgs` ~baris 306-399, `fetch_semantic_scholar`, `fetch_crossref`, `fetch_doaj`, `fetch_core`, `fetch_openalex`) dan `app/engine/free_api_fallbacks.py` (`search_with_fallbacks`, `get_cache_key`).
    - Sumber hidup: DuckDuckGo (ddgs), Semantic Scholar (3 API key rotasi), Crossref, DOAJ/arXiv/CORE, ScraperAPI. MATI: Cohere web-search connector (dihapus 15 Sep 2025), Google CSE (403 untuk akun baru).
    - Menghasilkan: ~1995-2020 abstrak preloaded dari API + ~204-211 URL web hasil DDG/dork.
 
@@ -22,11 +22,11 @@ Alur pemrosesan dari PDF hingga skor akhir, beserta file kunci tiap tahap (semua
    - Cache: `app/engine/.search_cache/` (166 file, ~1.2M, key = MD5(query), max_age 24 jam).
 
 4. **Matching N-Gram (shingling)**
-   - File: `D:/skripsi/skripsi_spam/Code_Spam_Email/plagiarism_checker/app/engine/shingling.py`, fungsi `calculate_similarity`, `get_ngrams` (n=5).
+   - File: `app/engine/shingling.py`, fungsi `calculate_similarity`, `get_ngrams` (n=5).
    - Menghitung overlap 5-gram doc vs tiap sumber; `exclude_small` (baris 212-213) membuang sumber <1%; agregasi global (baris 228-244) membentuk `is_matched_global` dan `ngram_similarity`.
 
 5. **Matching Semantic (parafrase)**
-   - File: `D:/skripsi/skripsi_spam/Code_Spam_Email/plagiarism_checker/app/engine/semantic_similarity.py` + layer semantic di `shingling.py` (baris ~408-438). GPU aktif (torch 2.6.0+cu124, CUDA True, RTX 3050). Mengecek kalimat unmatched (Rafly: 586 dari 726 sentence-span).
+   - File: `app/engine/semantic_similarity.py` + layer semantic di `shingling.py` (baris ~408-438). GPU aktif (torch 2.6.0+cu124, CUDA True, RTX 3050). Mengecek kalimat unmatched (Rafly: 586 dari 726 sentence-span).
 
 6. **Skor Akhir**
    - `ngram_similarity` + `semantic additional` -> Overall Index. Runner uji: `app/run_test_groundtruth.py` (memanggil `calculate_similarity(exclude_small=True, use_semantic=True)` di baris 26). Log: `app/test_gpu_run.log`.

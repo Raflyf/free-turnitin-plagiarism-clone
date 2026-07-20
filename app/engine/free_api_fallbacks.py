@@ -15,6 +15,10 @@ from pathlib import Path
 CACHE_DIR = Path(__file__).parent / '.search_cache'
 CACHE_DIR.mkdir(exist_ok=True)
 
+# Cetak peringatan "Google CSE belum dikonfigurasi" HANYA sekali per proses (dulu dicetak
+# per-probe = 100x -> memenuhi terminal). Fallback DuckDuckGo tetap jalan seperti biasa.
+_GOOGLE_UNCONFIGURED_WARNED = False
+
 def get_cache_key(query):
     """Generate cache key dari query"""
     return hashlib.md5(query.encode()).hexdigest()
@@ -180,10 +184,7 @@ def search_duckduckgo_html(query, max_results=10):
                     urls_found.append(url)
                     texts_found.append(f"{title}. {body}")
                     
-        if urls_found:
-            print(f"[DuckDuckGo API] Found {len(urls_found)} results")
-        else:
-            print("[DuckDuckGo API] Found 0 results (Query mungkin terlalu spesifik)")
+        # (log per-probe dibuang; total dilaporkan sekali di akhir get_candidate_urls)
             
     except Exception as e:
         print(f"[!] DuckDuckGo API error: {e}")

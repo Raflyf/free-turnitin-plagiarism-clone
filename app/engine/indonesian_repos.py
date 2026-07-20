@@ -388,9 +388,7 @@ def search_all_indonesian_repos(query, max_repos=10, results_per_repo=3):
     """
     all_urls = []
     all_texts = []
-    
-    print(f"[!] Searching {max_repos} Indonesian repositories...")
-    
+
     def search_single_repo(repo_url):
         try:
             urls, texts = search_repository_direct(repo_url, query, results_per_repo)
@@ -413,5 +411,7 @@ def search_all_indonesian_repos(query, max_repos=10, results_per_repo=3):
             except:
                 pass
     
-    print(f"[!] Found {len(all_urls)} results from Indonesian repositories")
+    # Hanya cetak bila benar-benar menemukan sesuatu (kurangi noise per-probe).
+    if all_urls:
+        print(f"[INDO REPOS] Found {len(all_urls)} results from Indonesian repositories")
     return all_urls, all_texts

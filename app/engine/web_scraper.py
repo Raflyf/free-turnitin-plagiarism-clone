@@ -356,7 +356,10 @@ def fetch_garuda(probe):
         # Potong jadi 8 kata saja. 15 kata terlalu spesifik
         short_probe = " ".join(probe.split()[:8])
         query = urllib.parse.quote(short_probe)
-        target_url = f"https://garuda.kemdikbud.go.id/documents?q={query}"
+        # Domain lama garuda.kemdikbud.go.id MATI (ConnectionError) sejak migrasi
+        # Kemdikbud -> Kemdiktisaintek. Domain baru garuda.kemdiktisaintek.go.id hidup
+        # (HTTP 200), selector a.title-article & path /documents tetap sama.
+        target_url = f"https://garuda.kemdiktisaintek.go.id/documents?q={query}"
         
         import os
         scraperapi_key = os.environ.get("SCRAPERAPI_KEY", "")
@@ -376,7 +379,7 @@ def fetch_garuda(probe):
                 if 'href' in a_tag.attrs:
                     url = a_tag['href']
                     if not url.startswith('http'):
-                        url = "https://garuda.kemdikbud.go.id" + url
+                        url = "https://garuda.kemdiktisaintek.go.id" + url
                     urls_found.append(url)
     except Exception as e:
         print(f"[!] Warning: API/Scraper error -> {e}")
@@ -595,7 +598,7 @@ def fetch_probe_multi(probe):
     # Klaim budget secara atomik (5 worker paralel): tanpa lock, read-modify-write bisa
     # ras -> jumlah crawl repo non-deterministik antar-run.
     _claim_repo = False
-    with _indo_budget_lock:
+    with _INDO_REPO_LOCK:
         if _INDO_REPO_BUDGET > 0:
             _INDO_REPO_BUDGET -= 1
             _claim_repo = True
@@ -603,7 +606,8 @@ def fetch_probe_multi(probe):
         try:
             from .indonesian_repos import search_all_indonesian_repos
             u_repo, t_repo = search_all_indonesian_repos(probe, max_repos=3, results_per_repo=2)
-            print(f"[INDO REPOS] Found {len(u_repo)} URLs from Indonesian repositories")
+            if u_repo:
+                print(f"[INDO REPOS] Found {len(u_repo)} URLs from Indonesian repositories")
         except Exception as e:
             print(f"[!] Indonesian repos module error: {e}")
     
@@ -612,7 +616,6 @@ def fetch_probe_multi(probe):
     try:
         from .free_api_fallbacks import search_with_fallbacks
         u_fallback, t_fallback = search_with_fallbacks(probe, use_cache=True)
-        print(f"[FREE APIs] Found {len(u_fallback)} URLs from free API fallbacks")
     except Exception as e:
         print(f"[!] Free API fallbacks error: {e}")
     
@@ -656,7 +659,7 @@ def get_candidate_urls(sentences, max_probes=100, progress_cb=None):
     # Reset budget penyisiran repo Indonesia untuk run ini (probe Tier-1 didahulukan).
     # Dikunci agar konsisten dgn decrement ber-lock di fetch_probe_multi.
     global _INDO_REPO_BUDGET
-    with _indo_budget_lock:
+    with _INDO_REPO_LOCK:
         _INDO_REPO_BUDGET = 15
 
     valid_sentences = [s for s in sentences if len(s.split()) >= 8]

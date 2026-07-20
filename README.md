@@ -191,14 +191,19 @@ Skor Total = (Kata Ter-match N-Gram + Kata Ter-match Semantic) / Total Kata Doku
 
 ## Changelog
 
-### v3.7 (Current) — Audit Menyeluruh + Perbaikan Ketahanan Pasca-Pindah
+### v3.8 (Current) — Fix Garuda RTO + Rapikan Log Terminal
+- **Fix ScraperAPI selalu RTO + 0 URL**: `fetch_garuda` men-scrape `garuda.kemdikbud.go.id` yang sudah MATI (domain migrasi ke `garuda.kemdiktisaintek.go.id`). Tiap probe boros ~15 detik nunggu timeout lalu balik kosong. Domain diganti ke yang hidup → terbukti kembali menghasilkan URL jurnal Garuda/SINTA nyata (selector `a.title-article` tetap valid). Lebih cepat DAN recall bertambah.
+- **Rapikan noise log terminal** (tanpa menyembunyikan error asli): logger Werkzeug dibisukan ke WARNING (log akses `GET /status` per-detik hilang, error HTTP tetap tampil); pesan "Google CSE belum dikonfigurasi" dari 100× jadi sekali; pesan "[DuckDuckGo]/[FREE APIs]/[INDO REPOS] Found N" hanya dicetak saat hasil > 0. Timeout ScraperAPI & blacklist repo mati SENGAJA dibiarkan (info jaringan nyata).
+- Semua perubahan hanya di jalur scraper/log → **skor 6 dokumen tervalidasi (frozen corpus) tidak berubah**.
+
+### v3.7 — Audit Menyeluruh + Perbaikan Ketahanan
 - **Fix regresi CRITICAL**: `get_candidate_urls` crash `UnboundLocalError: concurrent` di config default (efek samping dari menggating Cohere expander — `import concurrent.futures` yang dulu tak-bersyarat jadi ikut mati). Import dipindah ke scope modul, import lokal redundan dihapus. Tanpa fix ini, SEMUA upload PDF gagal.
 - **Fix frontend menggantung**: `checkStatus()` kini menangani respons 403/404/status tak dikenal + punya `.catch()` (toleransi 5 blip jaringan). Dulu overlay loading berputar selamanya bila server restart atau sesi tak cocok.
 - **Fix silent data-loss bank**: `save_to_corpus_bank` hanya commit ke cache in-memory setelah tulis disk sukses (dulu mutasi cache lebih dulu — bila tulis gagal, entri hilang dari disk tapi "terlanjur ada" di memori → tak pernah ditulis ulang).
 - **Fix kebocoran handle**: 2 `fitz.open` di scraper kini ditutup via `try/finally` (dulu tak pernah `.close()` → menumpuk handle PyMuPDF di pool 8-worker).
 - **Fix race**: `_INDO_REPO_BUDGET` dibungkus lock (dulu read-modify-write non-atomik dari 5 worker → non-reproducible).
 - **UI**: terima ekstensi `.PDF` huruf besar; teks hint diperbaiki.
-- **Pindah lokasi project** ke `D:\skripsi\project\plagiarism_checker` (terpisah dari project spam email). Kode pakai path relatif `__file__` → tak ada route/path yang rusak. Helper `run.bat`/`run.sh` ditambahkan.
+- Kode aplikasi memakai path relatif (`__file__`) sepenuhnya, sehingga project portabel — bisa dipindah ke folder mana pun tanpa mengubah route/path. Helper `run.bat`/`run.sh` ditambahkan.
 - Diverifikasi via 3 audit paralel + runtime: compile OK, 8 modul engine import OK, skoring deterministik cocok baseline (Hesti 11.4%, Rafly 5.5%), PDF report jalan, jalur scraping tereksekusi tanpa crash.
 
 ### v3.6 — Localhost Setara Metodologi Groundtruth

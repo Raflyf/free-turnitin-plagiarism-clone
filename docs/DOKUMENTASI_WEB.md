@@ -93,7 +93,17 @@ Keamanan: `file_id` UUID kripto-aman, ownership divalidasi via `session_id`, `de
 
 ## 8. Changelog Konseptual
 
-### v3.7 — Audit Hardening (pasca-pindah folder)
+### v3.8 — Fix Domain Garuda + Reduksi Noise Log
+- **FIX — ScraperAPI selalu timeout & 0 URL**: `fetch_garuda` men-scrape domain lama
+  `garuda.kemdikbud.go.id` yang sudah MATI (migrasi ke Kemdiktisaintek). Tiap probe boros
+  ~15 detik nunggu timeout lalu balik kosong. Diganti ke `garuda.kemdiktisaintek.go.id`
+  (hidup, selector `a.title-article` masih valid) → kini menghasilkan URL jurnal Garuda/SINTA
+  nyata, bukan lagi buang waktu. TIDAK menyentuh skor tervalidasi (frozen corpus).
+- **Reduksi noise log**: logger Werkzeug → WARNING (log akses `GET /status` per-detik hilang,
+  error tetap tampil); "Google unconfigured" cetak sekali (dulu 100×); "[FREE APIs]/[DuckDuckGo]/
+  [INDO REPOS] Found N" hanya saat N>0. Warning timeout/blacklist SENGAJA dibiarkan (info nyata).
+
+### v3.7 — Audit Hardening
 Audit menyeluruh 3-jalur (engine, server/web, scraper/API) + verifikasi runtime.
 - **FIX CRITICAL — regresi `UnboundLocalError: concurrent`**: efek samping dari mematikan
   Cohere expander (v3.6). `import concurrent.futures` yang tersisa hanya di blok bersyarat

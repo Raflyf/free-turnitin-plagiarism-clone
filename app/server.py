@@ -21,6 +21,11 @@ from engine.shingling import calculate_similarity
 from engine.pdf_generator import generate_report_pdf
 
 app = Flask(__name__)
+# Redam log akses HTTP Werkzeug (mis. "GET /status/... 200" tiap detik dari polling
+# frontend) agar terminal tidak dibanjiri. Hanya tampilkan WARNING ke atas; error asli
+# tetap terlihat. Log progres proses (print [!]/[API]) tidak terpengaruh.
+import logging as _logging
+_logging.getLogger('werkzeug').setLevel(_logging.WARNING)
 # Security: Generate secure secret key for sessions
 app.config['SECRET_KEY'] = os.environ.get('FLASK_SECRET_KEY') or secrets.token_hex(32)
 # Gunakan absolute path agar direktori selalu berada di dalam folder app/ 
