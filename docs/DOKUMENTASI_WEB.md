@@ -93,6 +93,25 @@ Keamanan: `file_id` UUID kripto-aman, ownership divalidasi via `session_id`, `de
 
 ## 8. Changelog Konseptual
 
+### v3.7 — Audit Hardening (pasca-pindah folder)
+Audit menyeluruh 3-jalur (engine, server/web, scraper/API) + verifikasi runtime.
+- **FIX CRITICAL — regresi `UnboundLocalError: concurrent`**: efek samping dari mematikan
+  Cohere expander (v3.6). `import concurrent.futures` yang tersisa hanya di blok bersyarat
+  membuat `concurrent` jadi variabel lokal → `get_candidate_urls` crash di config default
+  (setiap upload gagal). Diperbaiki: import dipindah ke scope modul, import lokal redundan dihapus.
+- **FIX HIGH — frontend menggantung**: `checkStatus()` kini menangani respons
+  `not_found`/403/undefined + `.catch()` (toleransi 5 blip jaringan). Sebelumnya overlay
+  loading berputar selamanya saat server restart atau sesi tak cocok.
+- **FIX HIGH — bank kehilangan data diam-diam**: `save_to_corpus_bank` kini commit ke
+  cache HANYA setelah tulis disk sukses (dulu mutasi cache dulu → gagal tulis = entri hilang permanen).
+- **FIX MEDIUM**: 2 `fitz.open` tanpa `.close()` (kebocoran handle saat scraping paralel);
+  race pada `_INDO_REPO_BUDGET` dibungkus lock (reproducibility).
+- **FIX LOW**: ekstensi `.PDF` huruf besar diterima; teks hint UI diperbaiki.
+- Diverifikasi BENAR (tak diubah): semua fix engine v3.5, default parameter aman, guard
+  div-by-zero, semua `requests` bertimeout, tak ada rekursi crawler. Temuan kalibrasi
+  (whole-chunk semantic, punctuation non-ASCII, `is_common_phrase`) TIDAK disentuh demi
+  menjaga skor tervalidasi MAE 1.25pt.
+
 ### v3.6 — Metodologi Localhost = Groundtruth
 - **Localhost memakai metodologi identik groundtruth**: korpus skoring = hasil scrape
   khusus dokumen (terkurasi), BUKAN bank mentah. Menghilangkan over-counting di akarnya.

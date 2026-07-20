@@ -300,7 +300,7 @@
         document.getElementById('fileInput').value = '';
         document.getElementById('fileText').innerText = 'Cek Plagiasi No-Repository';
         document.getElementById('fileSub').innerText = 'TARIK FILE MU KESINI / KLIK AJA DISINI';
-        document.getElementById('fileExt').innerText = '.docx .pdf aja ya';
+        document.getElementById('fileExt').innerText = 'Hanya menerima format .pdf';
         
         const btn = document.getElementById('submitBtn');
         btn.classList.remove('active');
@@ -361,10 +361,18 @@
     }
 
     function checkStatus(file_id) {
+        let pollErrors = 0;  // toleransi blip jaringan sesaat sebelum menyerah
+        const stopPolling = (msg) => {
+            clearInterval(checkInterval);
+            clearInterval(timerInterval);
+            alert(msg);
+            location.reload();
+        };
         checkInterval = setInterval(() => {
             fetch(`/status/${file_id}`)
             .then(response => response.json())
             .then(data => {
+                pollErrors = 0;  // respons valid -> reset penghitung error
                 if (data.status === 'processing') {
                     if (data.progress !== undefined) {
                         document.getElementById('progressBar').style.width = data.progress + '%';
@@ -381,10 +389,23 @@
                     document.getElementById('loadingSubtitle').innerText = 'Selesai. Membuka laporan...';
                     window.location.href = `/report/${file_id}`;
                 } else if (data.status === 'error') {
-                    clearInterval(checkInterval);
-                    clearInterval(timerInterval);
-                    alert("Error processing file: " + data.message);
-                    location.reload();
+                    stopPolling("Error processing file: " + (data.message || 'tidak diketahui'));
+                } else if (data.status === 'not_found') {
+                    // results_db terhapus (server restart) atau file_id basi
+                    stopPolling("Sesi analisis tidak ditemukan (server mungkin restart). Silakan unggah ulang.");
+                } else if (data.error) {
+                    // mis. 403 Unauthorized: cookie/sesi tidak cocok
+                    stopPolling("Akses ditolak: sesi tidak cocok. Silakan muat ulang halaman lalu coba lagi.");
+                } else {
+                    // bentuk respons tak dikenal -> jangan menggantung selamanya
+                    stopPolling("Respons server tidak dikenali. Silakan coba lagi.");
+                }
+            })
+            .catch(() => {
+                // blip jaringan/JSON gagal: toleransi 5 kali (5 detik) sebelum menyerah
+                pollErrors++;
+                if (pollErrors >= 5) {
+                    stopPolling("Koneksi ke server terputus. Silakan coba lagi.");
                 }
             });
         }, 1000); // Polling lebih cepat menjadi 1 detik untuk realtime UI

@@ -4,6 +4,7 @@ import random
 import requests
 import warnings
 from bs4 import BeautifulSoup, XMLParsedAsHTMLWarning
+import concurrent.futures
 from concurrent.futures import ThreadPoolExecutor
 
 # Sembunyikan peringatan jika situs web yang di-scrape berupa XML/RSS
@@ -45,29 +46,34 @@ def save_to_corpus_bank(new_corpus):
     setengah-tertulis walau proses mati di tengah jalan. Dijaga lock agar aman multi-thread."""
     global _bank_cache
     with _bank_lock:
-        bank = load_corpus_bank()
+        current = load_corpus_bank()
+        # Bangun kandidat di dict TERPISAH; cache in-memory (_bank_cache) baru di-commit
+        # SETELAH tulis disk sukses. Kalau tidak, kegagalan tulis meninggalkan sumber di
+        # memori tapi tak pernah di disk -> panggilan berikut menganggapnya sudah ada
+        # (added=0) sehingga tak pernah ditulis ulang (kehilangan data diam-diam).
+        merged = dict(current)
         added = 0
         for url, text in new_corpus.items():
-            if url not in bank and len(text) > 150:
-                bank[url] = text
+            if url not in merged and len(text) > 150:
+                merged[url] = text
                 added += 1
         if added > 0:
             os.makedirs(os.path.dirname(_BANK_PATH), exist_ok=True)
             tmp_path = _BANK_PATH + ".tmp"
             try:
                 with open(tmp_path, "w", encoding="utf-8") as f:
-                    _json.dump(bank, f, ensure_ascii=False)
+                    _json.dump(merged, f, ensure_ascii=False)
                 os.replace(tmp_path, _BANK_PATH)  # atomic pada satu filesystem
             except OSError as e:
-                print(f"[Bank] PERINGATAN: gagal menyimpan bank ({e})")
+                print(f"[Bank] PERINGATAN: gagal menyimpan bank ({e}); cache in-memory tak diubah, akan dicoba lagi")
                 if os.path.exists(tmp_path):
                     try:
                         os.remove(tmp_path)
                     except OSError:
                         pass
                 return
-            _bank_cache = bank
-            print(f"[Bank] +{added} sumber baru disimpan (total: {len(bank)})")
+            _bank_cache = merged  # commit ke cache HANYA setelah disk sukses
+            print(f"[Bank] +{added} sumber baru disimpan (total: {len(merged)})")
 
 # --- Rotasi API Key (round-robin) untuk backup & mengurangi rate-limit 429 ---
 import itertools, threading
@@ -146,7 +152,10 @@ def cohere_expand_queries(probe, n=3):
 
 # Budget global: jumlah probe yang boleh menyisir repo Indonesia (lambat karena throttling
 # server kampus). Di-reset tiap run di get_candidate_urls(). Melindungi dari 75x hit.
+# Lock: decrement dijalankan oleh banyak worker paralel -> tanpa lock, read-modify-write
+# bisa balapan (jumlah crawl non-deterministik). Lock membuat konsumsi budget deterministik.
 _INDO_REPO_BUDGET = 15
+_INDO_REPO_LOCK = threading.Lock()
 
 def fetch_semantic_scholar(probe):
     """Mencari paper di Semantic Scholar (Mencakup 200 Juta+ Makalah Akademik)"""
@@ -583,8 +592,14 @@ def fetch_probe_multi(probe):
     # API akademik + DDG. Repo tetap disisir menyeluruh via get_candidate_urls terpisah.
     u_repo, t_repo = [], []
     global _INDO_REPO_BUDGET
-    if _INDO_REPO_BUDGET > 0:
-        _INDO_REPO_BUDGET -= 1
+    # Klaim budget secara atomik (5 worker paralel): tanpa lock, read-modify-write bisa
+    # ras -> jumlah crawl repo non-deterministik antar-run.
+    _claim_repo = False
+    with _indo_budget_lock:
+        if _INDO_REPO_BUDGET > 0:
+            _INDO_REPO_BUDGET -= 1
+            _claim_repo = True
+    if _claim_repo:
         try:
             from .indonesian_repos import search_all_indonesian_repos
             u_repo, t_repo = search_all_indonesian_repos(probe, max_repos=3, results_per_repo=2)
@@ -639,8 +654,10 @@ def get_candidate_urls(sentences, max_probes=100, progress_cb=None):
     - Tier 3 (34%): Uniform sampling across document (ensures all chapters covered)
     """
     # Reset budget penyisiran repo Indonesia untuk run ini (probe Tier-1 didahulukan).
+    # Dikunci agar konsisten dgn decrement ber-lock di fetch_probe_multi.
     global _INDO_REPO_BUDGET
-    _INDO_REPO_BUDGET = 15
+    with _indo_budget_lock:
+        _INDO_REPO_BUDGET = 15
 
     valid_sentences = [s for s in sentences if len(s.split()) >= 8]
     if len(valid_sentences) <= max_probes:
@@ -705,7 +722,6 @@ def get_candidate_urls(sentences, max_probes=100, progress_cb=None):
                     print(f"[!] fetch_ddgs varian gagal: {e}")
             return list(found)
 
-        import concurrent.futures
         # max_workers=2: hormati Cohere trial 1 req/detik + hindari DDG rate-limit
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
             futures_exp = {executor.submit(fetch_expanded, (i, p)): i for i, p in enumerate(probes)}
@@ -856,8 +872,7 @@ def get_candidate_urls(sentences, max_probes=100, progress_cb=None):
                         print(f"[!] Tavily API Error: {e}")
                 
             return list(combined_urls)
-            
-        import concurrent.futures
+
         with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
             futures_pplx = {executor.submit(fetch_pplx, (i, p)): i for i, p in enumerate(probes)}
             for i, future in enumerate(concurrent.futures.as_completed(futures_pplx)):
@@ -940,9 +955,12 @@ def scrape_url(url):
                 # Direct-PDF: baca hingga 40 halaman (lebih tinggi dari deep-crawl karena
                 # link langsung = kandidat sumber utama), tapi tetap dibatasi agar tidak
                 # nyangkut di PDF ratusan halaman.
-                for page_num, page in enumerate(doc):
-                    if page_num >= 40: break
-                    text += page.get_text() + " "
+                try:
+                    for page_num, page in enumerate(doc):
+                        if page_num >= 40: break
+                        text += page.get_text() + " "
+                finally:
+                    doc.close()  # lepas handle PyMuPDF (mencegah leak di pool multi-thread)
                 text = re.sub(r'\s+', ' ', text).strip()
                 return url, text, total_bytes
             else:
@@ -989,9 +1007,12 @@ def scrape_url(url):
                                 # (versi lama) hanya menangkap cover+abstrak, sehingga isi Bab 2-4
                                 # yang paling sering diplagiat TIDAK ikut terindeks -> overlap 0.
                                 # Cap 30 halaman menyeimbangkan cakupan vs risiko nyangkut di PDF 300 hal.
-                                for page_num, page in enumerate(pdf_doc):
-                                    if page_num >= 30: break
-                                    pdf_text += page.get_text() + " "
+                                try:
+                                    for page_num, page in enumerate(pdf_doc):
+                                        if page_num >= 30: break
+                                        pdf_text += page.get_text() + " "
+                                finally:
+                                    pdf_doc.close()  # lepas handle PyMuPDF (hindari leak di pool multi-thread)
                         except Exception as e:
                             print(f"[!] Warning: API/Scraper error -> {e}")
                 
@@ -1035,7 +1056,6 @@ def scrape_all_candidates(urls, preloaded_corpus, progress_cb=None):
     from requests.packages.urllib3.exceptions import InsecureRequestWarning
     requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
     
-    import concurrent.futures
     import time
     start_time = time.time()
     total_downloaded_bytes = 0

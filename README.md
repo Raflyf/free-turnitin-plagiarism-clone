@@ -191,7 +191,17 @@ Skor Total = (Kata Ter-match N-Gram + Kata Ter-match Semantic) / Total Kata Doku
 
 ## Changelog
 
-### v3.6 (Current) — Localhost Setara Metodologi Groundtruth
+### v3.7 (Current) — Audit Menyeluruh + Perbaikan Ketahanan Pasca-Pindah
+- **Fix regresi CRITICAL**: `get_candidate_urls` crash `UnboundLocalError: concurrent` di config default (efek samping dari menggating Cohere expander — `import concurrent.futures` yang dulu tak-bersyarat jadi ikut mati). Import dipindah ke scope modul, import lokal redundan dihapus. Tanpa fix ini, SEMUA upload PDF gagal.
+- **Fix frontend menggantung**: `checkStatus()` kini menangani respons 403/404/status tak dikenal + punya `.catch()` (toleransi 5 blip jaringan). Dulu overlay loading berputar selamanya bila server restart atau sesi tak cocok.
+- **Fix silent data-loss bank**: `save_to_corpus_bank` hanya commit ke cache in-memory setelah tulis disk sukses (dulu mutasi cache lebih dulu — bila tulis gagal, entri hilang dari disk tapi "terlanjur ada" di memori → tak pernah ditulis ulang).
+- **Fix kebocoran handle**: 2 `fitz.open` di scraper kini ditutup via `try/finally` (dulu tak pernah `.close()` → menumpuk handle PyMuPDF di pool 8-worker).
+- **Fix race**: `_INDO_REPO_BUDGET` dibungkus lock (dulu read-modify-write non-atomik dari 5 worker → non-reproducible).
+- **UI**: terima ekstensi `.PDF` huruf besar; teks hint diperbaiki.
+- **Pindah lokasi project** ke `D:\skripsi\project\plagiarism_checker` (terpisah dari project spam email). Kode pakai path relatif `__file__` → tak ada route/path yang rusak. Helper `run.bat`/`run.sh` ditambahkan.
+- Diverifikasi via 3 audit paralel + runtime: compile OK, 8 modul engine import OK, skoring deterministik cocok baseline (Hesti 11.4%, Rafly 5.5%), PDF report jalan, jalur scraping tereksekusi tanpa crash.
+
+### v3.6 — Localhost Setara Metodologi Groundtruth
 - **Alur localhost = metodologi validasi.** Saat upload PDF, korpus skoring dibangun dari hasil scrape internet **khusus dokumen itu** (100 probe), persis seperti `run_test_groundtruth.py`. Skor dokumen tervalidasi konsisten saat dites via localhost.
 - **Bank korpus turun peran jadi CACHE**, bukan basis korpus. Bank mentah (17k+ sumber) dulu dijadikan korpus dan menyebabkan over-counting: union global "menjahit" potongan pendek dari ratusan sumber tak relevan jadi blok plagiat palsu. Kini bank hanya dipakai di dalam `scrape_all_candidates` untuk mempercepat (URL yang sudah pernah diunduh diambil instan) + auto-freeze sumber baru. Komposisi korpus skoring tetap terkurasi.
 - **Parameter engine default aman.** `calculate_similarity` menerima `semantic_max_sources` (default None) & `min_source_overlap` (default 1) — keduanya diset ke default lama pada jalur groundtruth & localhost, sehingga skor tervalidasi TIDAK berubah.

@@ -142,7 +142,7 @@ def upload_file():
     if file.filename == '':
         return jsonify({'error': 'No selected file'}), 400
         
-    if file and file.filename.endswith('.pdf'):
+    if file and file.filename.lower().endswith('.pdf'):
         filename = secure_filename(file.filename)
         # SECURITY FIX: Use cryptographically secure UUID instead of predictable timestamp
         file_id = str(uuid.uuid4())
