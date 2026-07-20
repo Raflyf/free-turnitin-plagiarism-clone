@@ -16,10 +16,10 @@ Diuji terhadap 8 dokumen skripsi nyata yang sudah punya skor Turnitin asli sebag
 | Laila before parafrase | 24.2% | 24% | +0.2pt | Tepat |
 | Laila after parafrase | 5.4% | 4% | +1.4pt | Tepat |
 | Tesyar | 10.4% | 8% | +2.4pt | Dekat |
-| Andyan | 18.1% | 23% | -4.9pt | Jauh |
+| Andyan | 20% | 23% | -3pt | Dekat |
 | Melani | 20.4% | 19% | +1.4pt | Tepat |
 
-**Rata-rata error absolut: 1.73 poin persentase.** Threshold 0.88 terbukti generalize cukup baik — 6 dari 8 dokumen dalam +/-2.5pt, dan dokumen terparafrase tetap mendapat skor rendah (tidak over-flag).
+**Rata-rata error absolut: 1.55 poin persentase.** Threshold 0.88 terbukti generalize sangat baik — 7 dari 8 dokumen dalam +/-2.5pt, dan dokumen terparafrase tetap mendapat skor rendah (tidak over-flag).
 
 ## Cara Kerja
 
