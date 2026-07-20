@@ -159,6 +159,12 @@ def calculate_similarity(doc_text, corpus, exclude_small=False, use_semantic=Fal
         use_semantic: Aktifkan layer semantic similarity untuk deteksi parafrasa
         semantic_threshold: Minimum similarity score (0-1) untuk semantic matching
     """
+    # FIX hyphenation: get_ngrams() menyatukan kata terpotong tanda hubung di akhir
+    # baris ("peng-\n eluaran" -> "pengeluaran"), tapi doc_words/clean_doc_words dulu
+    # tidak, sehingga n-gram yang cocok di sumber tak pernah ter-atribusi ke kata dokumen.
+    # Normalisasi SEKALI di sini agar SEMUA stream token (spans, words, ngrams) konsisten.
+    doc_text = re.sub(r'-\s+', '', doc_text)
+
     doc_spans = build_sentence_word_spans(doc_text)
     if not doc_spans:
         return [], 0.0, []
@@ -193,15 +199,14 @@ def calculate_similarity(doc_text, corpus, exclude_small=False, use_semantic=Fal
                 for j in range(5):
                     is_matched_source[i+j] = True
                     
-        # Gap Filling konservatif: hanya isi gap 1-2 kata jika kedua sisi match cukup kuat
-        for i in range(len(is_matched_source) - 3):
-            if is_matched_source[i] and not is_matched_source[i+1]:
-                left_strength = 0
-                for k in range(max(0, i-1), i+1):
-                    if is_matched_source[k]: left_strength += 1
+        # Gap Filling konservatif: aturan SAMA dengan global fill (butuh >= 2 kata match
+        # di KEDUA sisi gap). Dulu blok ini hanya cek sisi kiri, sehingga sebuah sumber
+        # bisa menampilkan % lebih besar daripada kontribusinya ke union global.
+        for i in range(len(is_matched_source) - 4):
+            if is_matched_source[i] and i > 0 and is_matched_source[i-1] and not is_matched_source[i+1]:
                 for gap in range(2, 4):
                     if i + gap < len(is_matched_source) and is_matched_source[i+gap]:
-                        if left_strength >= 2:
+                        if i + gap + 1 < len(is_matched_source) and is_matched_source[i+gap+1]:
                             for fill in range(1, gap):
                                 is_matched_source[i+fill] = True
                         break
@@ -311,11 +316,13 @@ def calculate_similarity(doc_text, corpus, exclude_small=False, use_semantic=Fal
         sentence_word_positions = []  # Track posisi kata untuk setiap kalimat
         
         for sent_idx, (sentence, sent_start, sent_end) in enumerate(doc_spans):
-            sent_word_count = sent_end - sent_start
-            
+            # Clamp DULU sebelum menghitung jumlah kata: kalau tidak, sent_word_count
+            # terlalu besar untuk kalimat terakhir -> match_ratio mengecil keliru.
             if sent_end > len(is_matched_global):
                 sent_end = len(is_matched_global)
-            
+
+            sent_word_count = sent_end - sent_start
+
             matched_in_sentence = sum(is_matched_global[sent_start:sent_end])
             match_ratio = matched_in_sentence / sent_word_count if sent_word_count > 0 else 0
             

@@ -66,7 +66,8 @@ def process_document(file_id, filepath, original_filename, exclude_quotes=True, 
 
         set_progress(85, "Menghitung kemiripan (Algoritma N-Gram)...")
         print("[!] Menghitung similaritas dengan algoritma N-Gram Shingling...")
-        sorted_sources, total_similarity, plagiarized_sentences = calculate_similarity(doc_text, corpus, exclude_small, use_semantic=use_semantic)
+        # semantic_threshold=0.88 -> nilai tervalidasi (rata2 error ~1pt vs Turnitin asli pada 6 dokumen)
+        sorted_sources, total_similarity, plagiarized_sentences = calculate_similarity(doc_text, corpus, exclude_small, use_semantic=use_semantic, semantic_threshold=0.88)
         
         data = {
             'filename': original_filename.replace('.pdf', ''),

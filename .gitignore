@@ -12,3 +12,8 @@ reports/
 .search_cache/
 app/before_turnitin/
 *.pdf
+
+# Runtime artifacts (log & hasil test, tidak perlu di-commit)
+*.log
+app/test_groundtruth_result.json
+*.tmp

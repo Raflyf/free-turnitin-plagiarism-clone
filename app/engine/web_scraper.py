@@ -9,6 +9,66 @@ from concurrent.futures import ThreadPoolExecutor
 # Sembunyikan peringatan jika situs web yang di-scrape berupa XML/RSS
 warnings.filterwarnings("ignore", category=XMLParsedAsHTMLWarning)
 
+# --- Bank Korpus Lokal (mirip database Turnitin) ---
+import json as _json
+
+import threading as _threading
+
+_BANK_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "corpus_bank", "bank.json")
+_bank_cache = None
+_bank_lock = _threading.Lock()  # lindungi mutasi cache + tulis file dari race antar-thread
+
+def load_corpus_bank():
+    """Load bank korpus lokal (cache in-memory setelah load pertama).
+
+    Bila bank.json korup (mis. terputus saat proses lain crash saat menulis), JANGAN
+    membuat seluruh pengecekan gagal: beri peringatan dan perlakukan bank sebagai kosong."""
+    global _bank_cache
+    if _bank_cache is not None:
+        return _bank_cache
+    if os.path.exists(_BANK_PATH):
+        try:
+            with open(_BANK_PATH, "r", encoding="utf-8") as f:
+                _bank_cache = _json.load(f)
+            print(f"[Bank] Loaded {len(_bank_cache)} sumber dari bank lokal")
+        except (ValueError, OSError) as e:
+            print(f"[Bank] PERINGATAN: gagal membaca bank ({e}); memakai bank kosong")
+            _bank_cache = {}
+    else:
+        _bank_cache = {}
+    return _bank_cache
+
+def save_to_corpus_bank(new_corpus):
+    """Tambahkan sumber baru ke bank (append-only, tidak menghapus yang sudah ada).
+
+    Penulisan ATOMIK: tulis ke file sementara lalu os.replace, agar bank.json tak pernah
+    setengah-tertulis walau proses mati di tengah jalan. Dijaga lock agar aman multi-thread."""
+    global _bank_cache
+    with _bank_lock:
+        bank = load_corpus_bank()
+        added = 0
+        for url, text in new_corpus.items():
+            if url not in bank and len(text) > 150:
+                bank[url] = text
+                added += 1
+        if added > 0:
+            os.makedirs(os.path.dirname(_BANK_PATH), exist_ok=True)
+            tmp_path = _BANK_PATH + ".tmp"
+            try:
+                with open(tmp_path, "w", encoding="utf-8") as f:
+                    _json.dump(bank, f, ensure_ascii=False)
+                os.replace(tmp_path, _BANK_PATH)  # atomic pada satu filesystem
+            except OSError as e:
+                print(f"[Bank] PERINGATAN: gagal menyimpan bank ({e})")
+                if os.path.exists(tmp_path):
+                    try:
+                        os.remove(tmp_path)
+                    except OSError:
+                        pass
+                return
+            _bank_cache = bank
+            print(f"[Bank] +{added} sumber baru disimpan (total: {len(bank)})")
+
 # --- Rotasi API Key (round-robin) untuk backup & mengurangi rate-limit 429 ---
 import itertools, threading
 
@@ -636,8 +696,8 @@ def get_candidate_urls(sentences, max_probes=100, progress_cb=None):
                     for u in v_urls:
                         if u and u.startswith('http'):
                             found.add(u)
-                except Exception:
-                    pass
+                except Exception as e:
+                    print(f"[!] fetch_ddgs varian gagal: {e}")
             return list(found)
 
         import concurrent.futures
@@ -650,8 +710,8 @@ def get_candidate_urls(sentences, max_probes=100, progress_cb=None):
                 try:
                     for u in future.result():
                         urls.add(u)
-                except Exception:
-                    pass
+                except Exception as e:
+                    print(f"[!] expander future gagal: {e}")
     except Exception as e:
         print(f"[!] Cohere/DDG expander error: {e}")
 
@@ -803,8 +863,8 @@ def get_candidate_urls(sentences, max_probes=100, progress_cb=None):
                     for u in c_urls:
                         if u and u.startswith('http'):
                             urls.add(u)
-                except Exception:
-                    pass
+                except Exception as e:
+                    print(f"[!] pplx future gagal: {e}")
     # --- akhir blok API mati ---
 
     print(f"[API] Mencari jurnal dari {len(probes)} sampel kalimat via Semantic Scholar, Crossref & DuckDuckGo...")
@@ -944,11 +1004,26 @@ def scrape_url(url):
     return url, "", total_bytes
 
 def scrape_all_candidates(urls, preloaded_corpus, progress_cb=None):
-    """Mengeksekusi multi-threading untuk mengunduh web, lalu digabung dengan preloaded_corpus (Jurnal API)"""
+    """Mengeksekusi multi-threading untuk mengunduh web, lalu digabung dengan preloaded_corpus (Jurnal API).
+    Bank lokal di-merge terlebih dahulu (cek lokal dulu, internet pelengkap)."""
     corpus = preloaded_corpus.copy()
+
+    # BANK LOKAL: merge sumber yang sudah pernah di-scrape sebelumnya (instan).
+    bank = load_corpus_bank()
+    bank_hits = 0
+    for url in list(urls):
+        if url in bank:
+            corpus[url] = bank[url]
+            bank_hits += 1
+    # Hapus URL yang sudah ada di bank (tak perlu scrape ulang)
+    urls = [u for u in urls if u not in bank and u not in corpus]
+    if bank_hits:
+        print(f"[Bank] {bank_hits} sumber ditemukan di bank lokal (skip scrape)")
+
     if not urls:
+        save_to_corpus_bank(corpus)
         return corpus
-        
+
     print(f"[Scraper] Bot Crawler mulai mengunduh {len(urls)} sumber web publik...")
     
     # Abaikan InsecureRequestWarning saat scrape blog/kampus yang SSL-nya mati
@@ -1003,4 +1078,6 @@ def scrape_all_candidates(urls, preloaded_corpus, progress_cb=None):
                 except Exception:
                     pass
 
+    # Simpan sumber baru ke bank lokal (makin kaya seiring waktu)
+    save_to_corpus_bank(corpus)
     return corpus

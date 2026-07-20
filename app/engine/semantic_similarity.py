@@ -48,7 +48,7 @@ def calculate_semantic_similarity(sentence1, sentence2):
     
     return similarity
 
-def find_semantic_matches(query_sentences, corpus_sentences, threshold=0.90):
+def find_semantic_matches(query_sentences, corpus_sentences, threshold=0.88):
     """
     Find semantically similar sentences from corpus that match query sentences.
     This is used as a second layer after N-Gram matching.
@@ -105,7 +105,7 @@ def find_semantic_matches(query_sentences, corpus_sentences, threshold=0.90):
     
     return semantic_matches
 
-def batch_semantic_check(unmatched_sentences, corpus_sentences, threshold=0.90, batch_size=32):
+def batch_semantic_check(unmatched_sentences, corpus_sentences, threshold=0.88, batch_size=32):
     """
     Efficiently check semantic similarity for sentences that weren't matched by N-Gram.
     Uses batch processing for better performance.
@@ -161,5 +161,11 @@ def batch_semantic_check(unmatched_sentences, corpus_sentences, threshold=0.90, 
                     'detection_method': 'semantic',
                     'original_sentence': query_sent
                 })
-    
+
+    # Urutkan tiap daftar match per-kalimat berdasarkan skor tertinggi. Tanpa ini,
+    # daftar tersusun urut dict sumber, sehingga matches[0] di pemanggil belum tentu
+    # match terbaik (atribusi sumber & skor yang ditampilkan bisa salah).
+    for query_idx in semantic_matches:
+        semantic_matches[query_idx].sort(key=lambda m: m['similarity_score'], reverse=True)
+
     return semantic_matches

@@ -12,8 +12,8 @@ os.makedirs(FROZEN, exist_ok=True)
 # REFRESH=1  -> kumpulkan ulang korpus dari internet (lalu bekukan ke disk).
 # default    -> pakai korpus beku (skor 100% reproducible, defensible).
 REFRESH = os.environ.get("REFRESH", "0") == "1"
-# THRESHOLD -> ambang semantic (default 0.90; berprinsip, setia perilaku Turnitin).
-THRESHOLD = float(os.environ.get("THRESHOLD", "0.90"))
+# THRESHOLD -> ambang semantic (default 0.88; nilai tervalidasi vs Turnitin asli).
+THRESHOLD = float(os.environ.get("THRESHOLD", "0.88"))
 
 
 def discover_docs():

@@ -1,7 +1,7 @@
 import fitz
 import re
 
-def detect_manipulation(text):
+def detect_manipulation(text, hidden_word_count=0):
     """Mendeteksi trik mahasiswa untuk mencurangi Turnitin"""
     warnings = []
     # 1. Deteksi Zero-Width Characters (diselipkan antar huruf agar kata tidak terbaca)
@@ -11,37 +11,89 @@ def detect_manipulation(text):
     
     # 2. Deteksi huruf Cyrillic Homoglyphs (Huruf Rusia yang terlihat seperti huruf A, E, O latin)
     # Ini sangat umum digunakan untuk memutus N-Gram
-    cyrillic_chars = re.findall(r'[асеорху]', text.lower())
+    cyrillic_chars = re.findall(r'[асеорхуАСЕОРХУ]', text)
     if len(cyrillic_chars) > 30:
         warnings.append("⚠️ MANIPULASI TERDETEKSI: Ditemukan penggunaan huruf Cyrillic (Rusia) ilegal yang menyamar sebagai abjad Latin.")
-        
+
+    # 3. Deteksi teks tersembunyi (font mungil / warna putih) yang disuntik untuk
+    # menggelembungkan jumlah kata sehingga persentase similarity turun. Kata semacam
+    # ini sudah dibuang saat ekstraksi; di sini hanya memberi peringatan bila signifikan.
+    if hidden_word_count > 30:
+        warnings.append(f"⚠️ MANIPULASI TERDETEKSI: Ditemukan ~{hidden_word_count} kata teks tersembunyi (font mungil/tak terlihat) yang disuntikkan untuk menurunkan persentase similarity.")
+
     return warnings
+
+# Ambang teks tersembunyi: font < 4pt dianggap tak terbaca mata manusia
+MIN_VISIBLE_FONT_SIZE = 4.0
+
+def _extract_visible_text(doc):
+    """Ekstrak teks, BUANG span dengan font mungil (< 4pt) yang tak terbaca mata.
+    Mengembalikan (visible_text, hidden_word_count, any_dropped).
+
+    PENTING: warna putih SENGAJA tidak dipakai sebagai sinyal, karena teks putih
+    dipakai secara sah untuk label di atas kotak diagram (mis. "Raw Email",
+    "Tokenizing") -> membuangnya = false positive + mengubah denominator dokumen bersih.
+    Font mungil (< 4pt) adalah sinyal anti-cheat yang andal dan tak muncul di dokumen normal.
+
+    Bila TIDAK ada span yang dibuang, caller memakai get_text() polos (verbatim) agar
+    hasil bit-identik dengan sebelumnya -> skor dokumen bersih dijamin tidak berubah."""
+    visible_parts = []
+    hidden_word_count = 0
+    any_dropped = False
+    for page in doc:
+        pd = page.get_text("dict")
+        for block in pd.get("blocks", []):
+            for line in block.get("lines", []):
+                for span in line.get("spans", []):
+                    span_text = span.get("text", "")
+                    if not span_text.strip():
+                        continue
+                    if span.get("size", 12.0) < MIN_VISIBLE_FONT_SIZE:
+                        hidden_word_count += len(span_text.split())
+                        any_dropped = True
+                        continue
+                    visible_parts.append(span_text)
+                visible_parts.append(" ")
+            visible_parts.append(" ")
+    return "".join(visible_parts), hidden_word_count, any_dropped
 
 def extract_text_from_pdf(filepath, exclude_quotes=True, exclude_biblio=True):
     """Extract text from PDF with robust error handling"""
     text = ""
+    hidden_word_count = 0
     try:
         doc = fitz.open(filepath)
-        for page in doc:
-            text += page.get_text() + " "
+        # Deteksi teks font-mungil (anti-cheat). HANYA bila ada yang dibuang kita
+        # pakai teks hasil span; jika tidak, pakai get_text() polos (verbatim) agar
+        # dokumen bersih bit-identik -> skor tidak berubah. Robust: gagal -> get_text().
+        try:
+            vis_text, hidden_word_count, any_dropped = _extract_visible_text(doc)
+        except Exception:
+            vis_text, hidden_word_count, any_dropped = "", 0, False
+        if any_dropped and vis_text.strip():
+            text = vis_text
+        else:
+            text = ""
+            for page in doc:
+                text += page.get_text() + " "
         doc.close()
-        
+
         if not text.strip():
             raise Exception("PDF appears to be empty or contains only images")
-            
+
     except Exception as e:
         raise Exception(f"Failed to extract PDF: {str(e)}")
-        
-    manipulation_warnings = detect_manipulation(text)
+
+    manipulation_warnings = detect_manipulation(text, hidden_word_count)
     
     cleaned_text = clean_text(text, exclude_quotes, exclude_biblio)
     
     # Bersihkan Zero-width chars dari teks agar tetap bisa di-cek similarity-nya
     cleaned_text = re.sub(r'[\u200B-\u200D\uFEFF]', '', cleaned_text)
     # Normalkan huruf Cyrillic kembali ke Latin agar usahanya sia-sia
-    cyrillic_to_latin = str.maketrans('асеорху', 'aceopxy')
+    cyrillic_to_latin = str.maketrans('асеорхуАСЕОРХУ', 'aceopxyACEOPXY')
     cleaned_text = cleaned_text.translate(cyrillic_to_latin)
-    
+
     return cleaned_text, manipulation_warnings
 
 def extract_text_from_docx(docx_path, exclude_quotes=True, exclude_biblio=True):
@@ -61,7 +113,7 @@ def extract_text_from_docx(docx_path, exclude_quotes=True, exclude_biblio=True):
     manipulation_warnings = detect_manipulation(text)
     cleaned_text = clean_text(text, exclude_quotes, exclude_biblio)
     cleaned_text = re.sub(r'[​-‍﻿]', '', cleaned_text)
-    cyrillic_to_latin = str.maketrans('асеорху', 'aceopxy')
+    cyrillic_to_latin = str.maketrans('асеорхуАСЕОРХУ', 'aceopxyACEOPXY')
     cleaned_text = cleaned_text.translate(cyrillic_to_latin)
     return cleaned_text, manipulation_warnings
 
