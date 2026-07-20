@@ -191,8 +191,9 @@ Skor Total = (Kata Ter-match N-Gram + Kata Ter-match Semantic) / Total Kata Doku
 
 ## Changelog
 
-### v3.9 (Current) — Silent-Skip Google CSE
+### v3.9 (Current) — Silent-Skip Google CSE + Terminal Progress Log
 - **Google CSE di-skip diam-diam** saat `GOOGLE_API_KEYS` / `GOOGLE_CX_ID` kosong. Tidak ada pesan apapun yang dicetak -- langsung lompat ke DuckDuckGo tanpa delay. Kode CSE **tetap dipertahankan** agar siapapun yang memiliki key bisa langsung aktifkan via `.env`.
+- **Progress log per-10 probe di terminal**: setiap 10 probe selesai (dan di akhir), terminal mencetak akumulasi sumber yang ditemukan per-API (contoh: `[API] Probe 20/100 -- 342 sumber ditemukan | DuckDuckGo:120, SemanticScholar:85, Crossref:72, ...`). Menggantikan kekosongan sebelumnya di mana terminal hanya menampilkan error.
 - Menggantikan perilaku v3.8 yang masih mencetak pesan "belum dikonfigurasi" 1x per proses.
 - Skor 6 dokumen tervalidasi (frozen corpus) tidak berubah.
 

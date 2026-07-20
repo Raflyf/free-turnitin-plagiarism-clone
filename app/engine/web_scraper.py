@@ -572,7 +572,8 @@ def fetch_core(probe):
     return urls_found, texts_found
 
 def fetch_probe_multi(probe):
-    """Mencari ke semua mesin secara serentak dengan free API fallbacks"""
+    """Mencari ke semua mesin secara serentak dengan free API fallbacks.
+    Returns: (preloaded dict, normal_urls list, stats dict)"""
 
     # 1. Try academic APIs first (free, unlimited)
     u_ss, t_ss = fetch_semantic_scholar(probe)
@@ -620,6 +621,22 @@ def fetch_probe_multi(probe):
     except Exception as e:
         print(f"[!] Free API fallbacks error: {e}")
     
+    # Statistik per-API untuk probe ini
+    stats = {
+        "SemanticScholar": len(u_ss),
+        "Crossref": len(u_cr),
+        "OpenAlex": len(u_oa),
+        "DOAJ": len(u_doaj),
+        "arXiv": len(u_arxiv),
+        "CORE": len(u_core),
+        "GoogleScholar": len(u_gs),
+        "GoogleWeb": len(u_gw),
+        "Garuda": len(u_gr),
+        "DuckDuckGo": len(u_dd),
+        "IndoRepos": len(u_repo),
+        "Fallback": len(u_fallback),
+    }
+    
     # Gabungkan URL yang sudah ada abstraknya menjadi dictionary
     preloaded = {}
     for u, t in zip(u_ss, t_ss): preloaded[u] = t
@@ -644,7 +661,7 @@ def fetch_probe_multi(probe):
         else:
             normal_urls.append(u)
     
-    return preloaded, normal_urls
+    return preloaded, normal_urls, stats
 
 def get_candidate_urls(sentences, max_probes=100, progress_cb=None):
     """
@@ -893,6 +910,10 @@ def get_candidate_urls(sentences, max_probes=100, progress_cb=None):
 
     print(f"[API] Mencari jurnal dari {len(probes)} sampel kalimat via Semantic Scholar, Crossref & DuckDuckGo...")
     
+    # Akumulasi statistik per-API lintas semua probe
+    total_stats = {}
+    probes_done = 0
+    
     # Gunakan max_workers=5 agar ScrapingBee dan ScraperAPI tidak menolak request karena melanggar batas concurrency Free Tier
     with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
         futures = [executor.submit(fetch_probe_multi, p) for p in probes]
@@ -901,7 +922,11 @@ def get_candidate_urls(sentences, max_probes=100, progress_cb=None):
                 # Tambahkan offset progres dari Perplexity (100 kalimat)
                 progress_cb(min(100, len(probes)) + i + 1, min(100, len(probes)) + len(probes))
             try:
-                preloaded, ddg_urls = future.result()
+                preloaded, ddg_urls, stats = future.result()
+                
+                # Akumulasikan statistik
+                for api_name, count in stats.items():
+                    total_stats[api_name] = total_stats.get(api_name, 0) + count
                 
                 # Masukkan hasil API langsung ke Corpus (tanpa perlu web-scrape)
                 for u, t in preloaded.items():
@@ -911,9 +936,17 @@ def get_candidate_urls(sentences, max_probes=100, progress_cb=None):
                 for u in ddg_urls:
                     if u not in preloaded_corpus:
                         urls.add(u)
-                        
+                    
             except Exception as e:
                 print(f"[!] Peringatan di get_candidate_urls worker: {e}")
+            
+            probes_done += 1
+            # Cetak ringkasan progresif setiap 10 probe atau pada probe terakhir
+            if probes_done % 10 == 0 or probes_done == len(probes):
+                active = {k: v for k, v in total_stats.items() if v > 0}
+                parts = [f"{k}:{v}" for k, v in sorted(active.items(), key=lambda x: -x[1])]
+                total_found = sum(active.values())
+                print(f"[API] Probe {probes_done}/{len(probes)} -- {total_found} sumber ditemukan | {', '.join(parts)}")
                 
     print(f"[API] Berhasil menarik {len(preloaded_corpus)} abstrak jurnal dan {len(urls)} link web publik.")
     return list(urls), preloaded_corpus
