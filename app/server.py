@@ -203,7 +203,21 @@ def report(file_id):
     
     if file_data['status'] == 'completed':
         data = file_data['data']
-        data_for_html = {k:v for k,v in data.items() if k != 'plagiarized_sentences'}
+        
+        # Dedup per-DOMAIN untuk tampilan web (sama dengan PDF report)
+        seen_domains = set()
+        unique_sources = []
+        for source in data['sources']:
+            # Ekstrak domain dari URL
+            domain = source['url'].split('//')[-1].split('/')[0] if '//' in source['url'] else source['url']
+            if domain in seen_domains:
+                continue
+            seen_domains.add(domain)
+            unique_sources.append(source)
+            
+        data_for_html = {k:v for k,v in data.items() if k != 'plagiarized_sentences' and k != 'sources'}
+        data_for_html['sources'] = unique_sources
+        
         return render_template('report.html', data=data_for_html, file_id=file_id)
     return "Laporan belum siap atau terjadi kesalahan.", 404
 
