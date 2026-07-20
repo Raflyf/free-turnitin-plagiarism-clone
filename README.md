@@ -25,9 +25,11 @@ Alur pemrosesan (mirip Turnitin):
 
 ```
 PDF/DOCX → Ekstraksi Teks → Sampling 100 Kalimat Probe → Cari Sumber Online
-→ Download Teks Sumber → N-Gram 5-Gram Matching → Semantic Paraphrase Check
-→ Skor Agregasi Global → PDF Report Berwarna (gaya Turnitin)
+→ Download Teks Sumber (bank lokal dipakai sbg CACHE utk skip download) → N-Gram 5-Gram
+→ Semantic Paraphrase Check → Skor Agregasi Global → PDF Report Berwarna (gaya Turnitin)
 ```
+
+Web localhost memakai **metodologi identik** dengan runner validasi (`run_test_groundtruth.py`): korpus pembanding dikumpulkan dengan scrape internet khusus dokumen itu, bukan dari bank mentah. Bank korpus lokal hanya berperan sebagai **cache** (mempercepat download URL yang sudah pernah diambil) dan tumbuh otomatis (auto-freeze) tiap pengecekan.
 
 ### Layer 1: N-Gram Exact Matching (5-gram)
 - Dokumen dipecah jadi n-gram (5 kata berurutan)
@@ -38,9 +40,10 @@ PDF/DOCX → Ekstraksi Teks → Sampling 100 Kalimat Probe → Cari Sumber Onlin
 ### Layer 2: Semantic Similarity (deteksi parafrasa)
 - Kalimat yang TIDAK terdeteksi N-Gram (<30% match) dicek ulang
 - Menggunakan model `paraphrase-multilingual-MiniLM-L12-v2` (dukung bahasa Indonesia)
-- Threshold default 0.88 (dikalibrasi terhadap 5 dokumen ground truth)
+- Threshold default 0.88 (dikalibrasi terhadap 6 dokumen ground truth)
 - GPU auto-detect (CUDA); fallback CPU
 - Tidak ada double counting — hanya menambah kata yang belum terdeteksi N-Gram
+- **Selalu aktif** (tidak ada opsi mematikan di UI)
 
 ### Sumber Akademik yang Dijangkau
 - **Semantic Scholar** (200M+ paper, 3 API key rotasi)
@@ -52,7 +55,7 @@ PDF/DOCX → Ekstraksi Teks → Sampling 100 Kalimat Probe → Cari Sumber Onlin
 - **DuckDuckGo** (web search umum, prioritas domain .ac.id)
 - **Repository kampus Indonesia** (scraping langsung EPrints/DSpace/OJS)
 - **ScraperAPI** (bypass WAF/Cloudflare)
-- **Cohere AI** (query-expander untuk variasi frasa pencarian)
+- **Cohere AI** (query-expander untuk variasi frasa pencarian — opsional, aktifkan via env `USE_COHERE_EXPANDER=1`)
 
 ### PDF Report Bergaya Turnitin
 - Highlight berwarna per-sumber (10 warna, badge angka)
@@ -105,7 +108,8 @@ Buka browser: `http://localhost:5001`
 - **Kecualikan Kutipan** — skip teks dalam tanda kutip
 - **Kecualikan Daftar Pustaka** — skip halaman daftar pustaka
 - **Kecualikan sumber <1%** — sembunyikan sumber kecil dari daftar (skor total TIDAK berubah)
-- **Deteksi Parafrasa (Semantic AI)** — aktifkan layer 2 (butuh GPU untuk kecepatan)
+
+Deteksi Parafrasa (Semantic AI) **selalu aktif** dan tidak lagi ditampilkan sebagai opsi.
 
 ### Jalankan Validasi Ground Truth
 
@@ -187,7 +191,15 @@ Skor Total = (Kata Ter-match N-Gram + Kata Ter-match Semantic) / Total Kata Doku
 
 ## Changelog
 
-### v3.5 (Current) — Audit Engine + Perbaikan Ketahanan
+### v3.6 (Current) — Localhost Setara Metodologi Groundtruth
+- **Alur localhost = metodologi validasi.** Saat upload PDF, korpus skoring dibangun dari hasil scrape internet **khusus dokumen itu** (100 probe), persis seperti `run_test_groundtruth.py`. Skor dokumen tervalidasi konsisten saat dites via localhost.
+- **Bank korpus turun peran jadi CACHE**, bukan basis korpus. Bank mentah (17k+ sumber) dulu dijadikan korpus dan menyebabkan over-counting: union global "menjahit" potongan pendek dari ratusan sumber tak relevan jadi blok plagiat palsu. Kini bank hanya dipakai di dalam `scrape_all_candidates` untuk mempercepat (URL yang sudah pernah diunduh diambil instan) + auto-freeze sumber baru. Komposisi korpus skoring tetap terkurasi.
+- **Parameter engine default aman.** `calculate_similarity` menerima `semantic_max_sources` (default None) & `min_source_overlap` (default 1) — keduanya diset ke default lama pada jalur groundtruth & localhost, sehingga skor tervalidasi TIDAK berubah.
+- **Toggle "Perkaya dari Internet" dihapus.** Internet selalu ON (wajib untuk PDF baru agar skor defensible). Untuk PDF yang belum ada frozen-nya, bank-only tidak dipakai lagi karena bisa menghasilkan skor palsu-rendah.
+- **Deteksi parafrasa (Semantic AI) default nyala**, opsi UI dihapus.
+- **Percepat fase pencarian**: Cohere query-expander (bottleneck rate-limit) kini default MATI via env `USE_COHERE_EXPANDER=1`. Sumber utama tetap dari DOAJ + Crossref + OpenAlex + Semantic Scholar + arXiv + CORE + DuckDuckGo langsung.
+
+### v3.5 — Audit Engine + Perbaikan Ketahanan
 - **Fix hyphenation**: normalisasi kata terpotong tanda hubung akhir baris sekali di awal, agar semua stream token (spans/words/ngrams) konsisten — overlap sumber ter-atribusi dengan benar
 - **Gap-fill per-sumber diperketat**: aturan sama dengan global fill (butuh >=2 kata match di kedua sisi gap), sumber tak bisa menampilkan % melebihi kontribusi union
 - **Fix `sent_word_count`**: dihitung setelah clamp, memperbaiki `match_ratio` kalimat terakhir

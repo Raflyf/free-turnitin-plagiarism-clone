@@ -145,19 +145,23 @@ def get_ngrams(text, n=5):
 def get_shingles(text, n=5):
     return set(get_ngrams(text, n))
 
-def calculate_similarity(doc_text, corpus, exclude_small=False, use_semantic=False, semantic_threshold=0.88):
+def calculate_similarity(doc_text, corpus, exclude_small=False, use_semantic=False, semantic_threshold=0.88, semantic_max_sources=None, min_source_overlap=1):
     """
     Algoritma Turnitin Asli (Rabin-Karp / N-Gram Exact Match) + Semantic Similarity.
-    
+
     Layer 1: N-Gram exact matching untuk deteksi copy-paste langsung
     Layer 2: Semantic similarity untuk deteksi parafrasa (opsional)
-    
+
     Args:
         doc_text: Teks dokumen yang akan dicek
         corpus: Dictionary mapping URL ke teks sumber
         exclude_small: Exclude sumber dengan persentase < 1%
         use_semantic: Aktifkan layer semantic similarity untuk deteksi parafrasa
         semantic_threshold: Minimum similarity score (0-1) untuk semantic matching
+        semantic_max_sources: Batasi layer semantic hanya ke N sumber ber-overlap N-Gram
+            teratas. None (default) = tanpa batas (semua sumber ber-overlap dicek), agar
+            perilaku validasi groundtruth TIDAK berubah. Alur web bank-first mengisi angka
+            (mis. 500) supaya semantic tidak meng-encode ulang 15.967 sumber -> tetap cepat.
     """
     # FIX hyphenation: get_ngrams() menyatukan kata terpotong tanda hubung di akhir
     # baris ("peng-\n eluaran" -> "pengeluaran"), tapi doc_words/clean_doc_words dulu
@@ -187,6 +191,14 @@ def calculate_similarity(doc_text, corpus, exclude_small=False, use_semantic=Fal
         overlap_ngrams = total_doc_ngrams.intersection(s_ngrams)
         
         if not overlap_ngrams:
+            continue
+
+        # min_source_overlap: buang sumber yang overlap-nya sangat tipis SEBELUM union global.
+        # Default=1 -> identik perilaku lama (sumber overlap 0 sudah dibuang di atas). Dinaikkan
+        # HANYA untuk jalur bank/web (korpus mentah besar) guna mencegah union global "menjahit"
+        # potongan pendek dari ratusan sumber tak relevan jadi blok plagiat palsu. Groundtruth
+        # (frozen, terkurasi) memakai default -> skor tervalidasi tidak berubah.
+        if len(overlap_ngrams) < min_source_overlap:
             continue
             
         # Hitung persis berapa kata di doc_text yang tersusun dari overlap_ngrams sumber INI
@@ -336,9 +348,20 @@ def calculate_similarity(doc_text, corpus, exclude_small=False, use_semantic=Fal
         print(f"[!] Found {len(unmatched_sentences)} unmatched sentences for semantic check")
         
         if unmatched_sentences:
+            # Tentukan sumber mana yang diumpankan ke semantic. Secara default SEMUA sumber
+            # di corpus (perilaku groundtruth). Bila semantic_max_sources diisi (alur web
+            # bank-first), batasi ke N sumber ber-overlap N-Gram teratas -> semantic tak
+            # perlu meng-encode ulang belasan ribu sumber, jadi tetap dalam anggaran waktu.
+            if semantic_max_sources is not None:
+                candidate_urls = [s['url'] for s in sorted_sources[:semantic_max_sources]]
+                semantic_corpus = {u: corpus[u] for u in candidate_urls if u in corpus}
+                print(f"[!] Semantic dibatasi ke top-{len(semantic_corpus)} sumber ber-overlap (dari {len(corpus)} total)")
+            else:
+                semantic_corpus = corpus
+
             # Siapkan corpus dalam format yang diperlukan semantic_similarity
             corpus_by_sentence = {}
-            for url, source_text in corpus.items():
+            for url, source_text in semantic_corpus.items():
                 corpus_by_sentence[url] = get_sentences(source_text, filter_short=True)
             
             # Jalankan batch semantic check

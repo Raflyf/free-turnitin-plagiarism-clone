@@ -225,9 +225,6 @@
                 <label class="checkbox-item">
                     <input type="checkbox" id="chkKecil"> Kecualikan sumber yang kurang dari 1%
                 </label>
-                <label class="checkbox-item">
-                    <input type="checkbox" id="chkSemantic" checked> Deteksi Parafrasa (Algoritma Semantic AI)
-                </label>
             </div>
         </div>
         
@@ -321,7 +318,10 @@
         formData.append('exclude_quotes', document.getElementById('chkKutipan').checked);
         formData.append('exclude_biblio', document.getElementById('chkPustaka').checked);
         formData.append('exclude_small', document.getElementById('chkKecil').checked);
-        formData.append('use_semantic', document.getElementById('chkSemantic').checked);
+        formData.append('use_semantic', 'true');  // Deteksi parafrasa selalu nyala (tanpa opsi UI)
+
+        document.getElementById('loadingSubtitle').innerText =
+            'Mencari sumber di internet lalu mencocokkan (metodologi sama dengan validasi, ~10-15 menit).';
 
         document.getElementById('loadingOverlay').style.display = 'flex';
         document.getElementById('progressContainer').style.display = 'block';

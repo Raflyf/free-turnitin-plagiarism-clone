@@ -17,3 +17,6 @@ app/before_turnitin/
 *.log
 app/test_groundtruth_result.json
 *.tmp
+
+# Tooling skill lokal (ribuan file, tidak perlu di-repo)
+.claude/

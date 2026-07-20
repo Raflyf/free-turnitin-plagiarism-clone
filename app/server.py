@@ -16,7 +16,7 @@ from flask import Flask, render_template, request, jsonify, send_file, session
 from werkzeug.utils import secure_filename
 import threading
 from engine.extractor import extract_text_from_pdf, get_sentences
-from engine.web_scraper import get_candidate_urls, scrape_all_candidates
+from engine.web_scraper import get_candidate_urls, scrape_all_candidates, load_corpus_bank
 from engine.shingling import calculate_similarity
 from engine.pdf_generator import generate_report_pdf
 
@@ -36,7 +36,13 @@ os.makedirs(app.config['REPORT_FOLDER'], exist_ok=True)
 # Store results in memory
 results_db = {}
 
-def process_document(file_id, filepath, original_filename, exclude_quotes=True, exclude_biblio=True, exclude_small=False, use_semantic=False):
+# Jumlah kalimat-probe untuk mencari sumber di internet. SAMA dengan groundtruth
+# (run_test_groundtruth.py pakai 100) agar metodologi & skor localhost setara nilai
+# tervalidasi. Bisa diturunkan via env bila ingin lebih cepat (mengorbankan recall).
+INTERNET_MAX_PROBES = int(os.environ.get("INTERNET_MAX_PROBES", "100"))
+
+
+def process_document(file_id, filepath, original_filename, exclude_quotes=True, exclude_biblio=True, exclude_small=False, use_semantic=False, use_internet=True):
     def set_progress(pct, msg):
         if file_id in results_db:
             results_db[file_id]['progress'] = pct
@@ -47,28 +53,41 @@ def process_document(file_id, filepath, original_filename, exclude_quotes=True, 
         print(f"[!] Mulai ekstraksi teks dari: {filepath}")
         doc_text, manipulation_warnings = extract_text_from_pdf(filepath, exclude_quotes, exclude_biblio)
         sentences = get_sentences(doc_text)
-        
+
+        # ===== METODOLOGI IDENTIK GROUNDTRUTH =====
+        # Korpus skoring = hasil scrape KHUSUS dokumen ini (terkurasi & relevan), PERSIS
+        # seperti run_test_groundtruth.py. Bank TIDAK dijadikan basis korpus (bank mentah
+        # 17k sumber bikin over-counting). Bank turun peran jadi CACHE di dalam
+        # scrape_all_candidates: URL yang sudah pernah diunduh diambil instan (skip
+        # download), sumber baru otomatis ditambahkan (auto-freeze). Ini mempercepat
+        # tanpa mengubah komposisi korpus vs metodologi groundtruth.
         def ddg_progress(completed, total):
-            pct = 5 + int((completed / total) * 35) # 5% to 40%
-            set_progress(pct, f"Mencari web ({completed}/{total})...")
-            
-        print(f"[!] Mencari kandidat dari web (Mode Hybrid: 75 Fingerprints Skripsi)...")
-        urls, preloaded_corpus = get_candidate_urls(sentences, max_probes=100, progress_cb=ddg_progress)
-        
+            pct = 5 + int((completed / total) * 45)  # 5% -> 50%
+            set_progress(pct, f"Mencari sumber di internet ({completed}/{total})...")
+
+        print(f"[!] Mencari kandidat sumber (max_probes={INTERNET_MAX_PROBES}, metodologi groundtruth)...")
+        urls, preloaded_corpus = get_candidate_urls(sentences, max_probes=INTERNET_MAX_PROBES, progress_cb=ddg_progress)
+
         def scrape_progress(completed, total, speed="0 KB/s"):
-            pct = 40 + int((completed / total) * 40) # 40% to 80%
-            if total == 0: pct = 80
+            pct = 50 + int((completed / total) * 35)  # 50% -> 85%
+            if total == 0: pct = 85
             speed_text = f" ({speed})" if speed != "0 KB/s" else ""
-            set_progress(pct, f"Mengunduh isi web ({completed}/{total}){speed_text}...")
-            
-        print(f"[!] Mengunduh teks dari {len(urls)} kandidat...")
+            set_progress(pct, f"Mengunduh isi sumber ({completed}/{total}){speed_text}...")
+
+        print(f"[!] Mengunduh teks dari {len(urls)} kandidat (bank dipakai sbg cache)...")
         corpus = scrape_all_candidates(urls, preloaded_corpus, progress_cb=scrape_progress)
+        print(f"[!] Korpus terkurasi utk dokumen ini: {len(corpus)} sumber.")
 
         set_progress(85, "Menghitung kemiripan (Algoritma N-Gram)...")
         print("[!] Menghitung similaritas dengan algoritma N-Gram Shingling...")
-        # semantic_threshold=0.88 -> nilai tervalidasi (rata2 error ~1pt vs Turnitin asli pada 6 dokumen)
-        sorted_sources, total_similarity, plagiarized_sentences = calculate_similarity(doc_text, corpus, exclude_small, use_semantic=use_semantic, semantic_threshold=0.88)
-        
+        # PARAMETER IDENTIK GROUNDTRUTH: hanya semantic_threshold=0.88. TANPA
+        # semantic_max_sources/min_source_overlap -> engine berperilaku persis seperti
+        # run_test_groundtruth.py, sehingga skor dokumen tervalidasi konsisten saat
+        # dites di localhost (korpus sama-sama terkurasi, bukan bank mentah).
+        sorted_sources, total_similarity, plagiarized_sentences = calculate_similarity(
+            doc_text, corpus, exclude_small, use_semantic=use_semantic,
+            semantic_threshold=0.88)
+
         data = {
             'filename': original_filename.replace('.pdf', ''),
             'total_similarity': round(total_similarity),
@@ -116,7 +135,9 @@ def upload_file():
     exclude_quotes = request.form.get('exclude_quotes') == 'true'
     exclude_biblio = request.form.get('exclude_biblio') == 'true'
     exclude_small = request.form.get('exclude_small') == 'true'
-    use_semantic = request.form.get('use_semantic') == 'true'
+    # Deteksi parafrasa (Semantic AI) selalu nyala; UI tak lagi menampilkan opsinya.
+    # Default True agar tetap aktif walau field 'use_semantic' tidak dikirim form.
+    use_semantic = request.form.get('use_semantic', 'true') == 'true'
 
     if file.filename == '':
         return jsonify({'error': 'No selected file'}), 400

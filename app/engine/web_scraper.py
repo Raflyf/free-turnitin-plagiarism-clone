@@ -678,7 +678,12 @@ def get_candidate_urls(sentences, max_probes=100, progress_cb=None):
     
     print(f"[API] Meluncurkan Bot AI & Browser Crawler untuk {len(probes)} Fingerprints...")
     
-    try:
+    # USE_COHERE_EXPANDER (default "0"=MATI): blok Cohere->DDG ini bottleneck utama
+    # (Cohere trial 1 req/detik + 3 varian/probe x DDG yg sering kena rate-limit 429).
+    # Sumber utama tetap datang dari DOAJ/Crossref/OpenAlex/Semantic Scholar + DDG
+    # langsung di fase kedua (fetch_probe_multi). Nyalakan hanya bila butuh recall ekstra.
+    if os.environ.get("USE_COHERE_EXPANDER", "0") == "1":
+      try:
         # ========================================================================
         # COHERE QUERY-EXPANDER -> DUCKDUCKGO
         # Perplexity/Gemini/Tavily quota habis & Google CSE ditutup permanen.
@@ -712,7 +717,7 @@ def get_candidate_urls(sentences, max_probes=100, progress_cb=None):
                         urls.add(u)
                 except Exception as e:
                     print(f"[!] expander future gagal: {e}")
-    except Exception as e:
+      except Exception as e:
         print(f"[!] Cohere/DDG expander error: {e}")
 
     # --- blok API mati di bawah dinonaktifkan (disimpan sbagai referensi histori) ---
