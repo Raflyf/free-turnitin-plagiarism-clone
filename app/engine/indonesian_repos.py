@@ -101,7 +101,10 @@ def search_repository_direct(repo_url, query, max_results=5):
         err = str(e).lower()
         if any(k in err for k in ("timed out", "timeout", "max retries", "sslerror",
                                    "connection", "ssl:")):
-            print(f"[!] {repo_url} mati/timeout. Menambahkan ke Blacklist...")
+            # Cetak sekali saja per host: beberapa worker paralel bisa gagal
+            # bersamaan sebelum host masuk set (dulu pesan sama tercetak 4x).
+            if repo_url not in DEAD_REPOSITORIES:
+                print(f"[!] {repo_url} mati/timeout. Menambahkan ke Blacklist...")
             DEAD_REPOSITORIES.add(repo_url)
         else:
             print(f"[!] Error searching {repo_url}: {e}")

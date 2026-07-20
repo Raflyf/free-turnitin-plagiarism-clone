@@ -1,7 +1,9 @@
 """
-Free API Fallbacks - Google Custom Search JSON API
-Menggunakan Google Custom Search API (10,000 queries/day GRATIS)
-Jauh lebih reliable daripada scraping atau API trial yang mudah habis.
+Free API Fallbacks - Pencarian Web dengan DuckDuckGo + Google CSE (opsional).
+Default: DuckDuckGo (tanpa konfigurasi apapun, langsung jalan).
+Jika GOOGLE_API_KEYS + GOOGLE_CX_ID diisi di .env, Google CSE dipakai lebih dulu;
+DuckDuckGo menjadi fallback jika Google gagal. Kode CSE sengaja dipertahankan
+agar siapapun yang memiliki key bisa langsung mengaktifkannya.
 """
 
 import requests
@@ -15,9 +17,7 @@ from pathlib import Path
 CACHE_DIR = Path(__file__).parent / '.search_cache'
 CACHE_DIR.mkdir(exist_ok=True)
 
-# Cetak peringatan "Google CSE belum dikonfigurasi" HANYA sekali per proses (dulu dicetak
-# per-probe = 100x -> memenuhi terminal). Fallback DuckDuckGo tetap jalan seperti biasa.
-_GOOGLE_UNCONFIGURED_WARNED = False
+# Google CSE: silent-skip jika key kosong. Kode CSE tetap ada untuk yang punya key.
 
 def get_cache_key(query):
     """Generate cache key dari query"""
@@ -32,7 +32,7 @@ def get_cached_results(query, max_age_hours=24):
             try:
                 with open(cache_file, 'r', encoding='utf-8') as f:
                     data = json.load(f)
-                    print(f"[CACHE] Found cached results for query (age: {age_hours:.1f}h)")
+                    # (log cache-hit per-query dibuang; dulu tercetak ~100x per dokumen)
                     return data['urls'], data['texts']
             except:
                 pass
@@ -187,8 +187,11 @@ def search_duckduckgo_html(query, max_results=10):
         # (log per-probe dibuang; total dilaporkan sekali di akhir get_candidate_urls)
             
     except Exception as e:
-        print(f"[!] DuckDuckGo API error: {e}")
-        
+        # Timeout/rate-limit DDG lumrah & terjadi per-probe -> cetak sekali saja per proses.
+        if not getattr(search_duckduckgo_html, "_warned", False):
+            print(f"[!] DuckDuckGo API error (ditampilkan sekali): {e}")
+            search_duckduckgo_html._warned = True
+
     return urls_found, texts_found
 
 def search_with_fallbacks(query, use_cache=True):
@@ -235,12 +238,8 @@ def search_with_fallbacks(query, use_cache=True):
                 print(f"[!] Google API key error: {e}")
                 continue
     
-    # Fallback ke DuckDuckGo jika Google belum dikonfigurasi atau gagal mencari apapun
+    # Fallback ke DuckDuckGo jika Google tidak dikonfigurasi atau gagal
     if not all_urls:
-        if not is_configured:
-            print("[!] Google Custom Search API belum dikonfigurasi. Menggunakan fallback DuckDuckGo HTML...")
-        else:
-            print("[!] Google Custom Search API tidak menghasilkan data. Mencoba fallback DuckDuckGo HTML...")
             
         try:
             urls, texts = search_duckduckgo_html(short_query, max_results=15)

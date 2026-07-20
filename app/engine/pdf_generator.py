@@ -163,8 +163,12 @@ def generate_report_pdf(original_pdf_path, output_pdf_path, data):
     y_pos = 50
     margin_left = 50
     
-    # Header: Nama File
-    report_page.insert_text((margin_left, y_pos), f"{os.path.basename(original_pdf_path)}", fontsize=18, fontname="helv")
+    # Header: Nama File. Utamakan nama asli upload (data['filename']); path fisik
+    # memakai UUID (mis. 94ae2154-...pdf) sehingga tak informatif di report.
+    display_name = data.get('filename') or os.path.splitext(os.path.basename(original_pdf_path))[0]
+    if not display_name.lower().endswith('.pdf'):
+        display_name += '.pdf'
+    report_page.insert_text((margin_left, y_pos), display_name, fontsize=18, fontname="helv")
     y_pos += 30
     
     if 'manipulation_warnings' in data and data['manipulation_warnings']:
@@ -207,24 +211,39 @@ def generate_report_pdf(original_pdf_path, output_pdf_path, data):
     y_pos += 20
     
     # Daftar Sumber
-    if len(data['sources']) == 0:
+    # Dedup per-DOMAIN untuk tampilan: banyak URL berbeda (mis. doi.org/xxx, doi.org/yyy)
+    # menciut ke domain yang sama -> tampil berulang. Sumber sudah terurut % desc, jadi
+    # menyimpan kemunculan PERTAMA tiap domain = menahan yang kontribusinya tertinggi.
+    # Ini murni tampilan; skor total (union kata) dihitung terpisah & tidak berubah.
+    seen_domains = set()
+    unique_sources = []
+    for source in data['sources']:
+        domain = source['url'].split('//')[-1].split('/')[0]
+        if domain in seen_domains:
+            continue
+        seen_domains.add(domain)
+        unique_sources.append((domain, source))
+
+    if len(unique_sources) == 0:
         report_page.insert_text((margin_left, y_pos), "Tidak ditemukan kemiripan signifikan.", fontsize=10, fontname="helv")
     else:
-        for idx, source in enumerate(data['sources']):
+        for idx, (url_clean, source) in enumerate(unique_sources):
             if y_pos > 750: # Pindah halaman baru jika penuh
                 report_page = doc.new_page(-1, width=595, height=842)
                 y_pos = 50
-                
+
             source_id = idx + 1
             color = get_color_for_source(source_id)
-            
-            # Gambar kotak lencana sumber
-            rect = fitz.Rect(margin_left, y_pos - 12, margin_left + 15, y_pos + 3)
+
+            # Gambar kotak lencana sumber. Lebar menyesuaikan jumlah digit: angka 3-digit
+            # ("100") lebih lebar dari kotak tetap -> digit terakhir jatuh di luar kotak
+            # berwarna = teks putih di atas latar putih (tak terlihat, tampak seperti "10").
+            badge_w = 15 + max(0, len(str(source_id)) - 2) * 7
+            rect = fitz.Rect(margin_left, y_pos - 12, margin_left + badge_w, y_pos + 3)
             report_page.draw_rect(rect, color=color, fill=color)
             report_page.insert_text((margin_left + 4, y_pos), str(source_id), fontsize=10, fontname="helv", color=(1,1,1))
-            
-            # Format URL
-            url_clean = source['url'].split('//')[-1].split('/')[0]
+
+            # Format URL (domain sudah diekstrak saat dedup di atas)
             if len(url_clean) > 40:
                 url_clean = url_clean[:40] + "..."
                 
@@ -250,13 +269,15 @@ def generate_report_pdf(original_pdf_path, output_pdf_path, data):
 def draw_badge(page, inst, source_id, color):
     """Menggambar lencana angka superskrip di atas highlight"""
     # inst adalah fitz.Rect(x0, y0, x1, y1)
-    rect = fitz.Rect(inst.x0 - 8, inst.y0 - 6, inst.x0 + 4, inst.y0 + 4)
+    # Lebar kotak menyesuaikan jumlah digit: angka 2-3 digit (10, 100) lebih lebar
+    # dari 1 digit. Tanpa ini, digit terakhir jatuh di luar kotak -> teks putih di
+    # atas latar putih = tak terlihat (mis. "100" tampak seperti "10").
+    n_digits = len(str(source_id))
+    extra_w = (n_digits - 1) * 4
+    rect = fitz.Rect(inst.x0 - 8, inst.y0 - 6, inst.x0 + 4 + extra_w, inst.y0 + 4)
     page.draw_rect(rect, color=color, fill=color)
-    
+
     # Teks putih di dalam lencana
     text_x = inst.x0 - 6
     text_y = inst.y0 + 2
-    if source_id >= 10:
-        text_x -= 2
-        
     page.insert_text((text_x, text_y), str(source_id), fontsize=8, fontname="helv", color=(1,1,1))

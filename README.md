@@ -191,7 +191,12 @@ Skor Total = (Kata Ter-match N-Gram + Kata Ter-match Semantic) / Total Kata Doku
 
 ## Changelog
 
-### v3.8 (Current) — Fix Garuda RTO + Rapikan Log Terminal
+### v3.9 (Current) — Silent-Skip Google CSE
+- **Google CSE di-skip diam-diam** saat `GOOGLE_API_KEYS` / `GOOGLE_CX_ID` kosong. Tidak ada pesan apapun yang dicetak -- langsung lompat ke DuckDuckGo tanpa delay. Kode CSE **tetap dipertahankan** agar siapapun yang memiliki key bisa langsung aktifkan via `.env`.
+- Menggantikan perilaku v3.8 yang masih mencetak pesan "belum dikonfigurasi" 1x per proses.
+- Skor 6 dokumen tervalidasi (frozen corpus) tidak berubah.
+
+### v3.8 — Fix Garuda RTO + Rapikan Log Terminal
 - **Fix ScraperAPI selalu RTO + 0 URL**: `fetch_garuda` men-scrape `garuda.kemdikbud.go.id` yang sudah MATI (domain migrasi ke `garuda.kemdiktisaintek.go.id`). Tiap probe boros ~15 detik nunggu timeout lalu balik kosong. Domain diganti ke yang hidup → terbukti kembali menghasilkan URL jurnal Garuda/SINTA nyata (selector `a.title-article` tetap valid). Lebih cepat DAN recall bertambah.
 - **Rapikan noise log terminal** (tanpa menyembunyikan error asli): logger Werkzeug dibisukan ke WARNING (log akses `GET /status` per-detik hilang, error HTTP tetap tampil); pesan "Google CSE belum dikonfigurasi" dari 100× jadi sekali; pesan "[DuckDuckGo]/[FREE APIs]/[INDO REPOS] Found N" hanya dicetak saat hasil > 0. Timeout ScraperAPI & blacklist repo mati SENGAJA dibiarkan (info jaringan nyata).
 - Semua perubahan hanya di jalur scraper/log → **skor 6 dokumen tervalidasi (frozen corpus) tidak berubah**.

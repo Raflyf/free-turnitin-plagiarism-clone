@@ -491,7 +491,10 @@ def fetch_doaj(probe):
             if urls_found:
                 break
     except Exception as e:
-        print(f"[!] DOAJ API error: {e}")
+        # DOAJ sering lambat/timeout & dipanggil per-probe -> cetak sekali per proses saja.
+        if not getattr(fetch_doaj, "_warned", False):
+            print(f"[!] DOAJ API lambat/timeout (pesan ini hanya sekali): {e}")
+            fetch_doaj._warned = True
     return urls_found, texts_found
 
 def fetch_arxiv(probe):
@@ -606,8 +609,6 @@ def fetch_probe_multi(probe):
         try:
             from .indonesian_repos import search_all_indonesian_repos
             u_repo, t_repo = search_all_indonesian_repos(probe, max_repos=3, results_per_repo=2)
-            if u_repo:
-                print(f"[INDO REPOS] Found {len(u_repo)} URLs from Indonesian repositories")
         except Exception as e:
             print(f"[!] Indonesian repos module error: {e}")
     
