@@ -21,6 +21,32 @@ Diuji terhadap 8 dokumen skripsi nyata yang sudah punya skor Turnitin asli sebag
 
 **Rata-rata error absolut (MAE): 1.40 poin persentase.** Threshold 0.88 terbukti generalize sangat baik — 7 dari 8 dokumen berada dalam selisih +/-2.6pt, bahkan 4 di antaranya akurat hingga jarak <1pt. Dokumen terparafrase tetap mendapat skor rendah (tidak over-flag). Seluruh skor ini dihasilkan dari mode **Korpus Beku** sehingga 100% _reproducible_ dan konsisten (bebas variasi jaringan).
 
+## Keterbatasan (Penting Dibaca)
+
+### Kenapa skor bisa berbeda dari Turnitin asli:
+
+1. **Indeks Turnitin tidak bisa ditiru.** Turnitin punya 100+ miliar halaman web + 1.8 miliar makalah mahasiswa yang pernah disubmit + jurnal berbayar (IEEE, Springer, Elsevier). Alat ini hanya menjangkau sumber terbuka gratis.
+2. **Sumber yang tidak online = tidak terdeteksi.** Kalau seseorang menyalin dari skripsi kating yang hanya ada di arsip kampus (tidak dipublikasi online), Turnitin mungkin mendeteksinya (karena skripsi itu pernah disubmit), tapi alat ini tidak bisa.
+3. **Network variance.** Sumber yang sedang down/timeout saat pengecekan tidak akan masuk korpus.
+
+### Akurasi skor yang bisa diharapkan:
+
+- Skor lokal memiliki tingkat akurasi yang sangat tinggi dengan selisih rata-rata (MAE) hanya **~1.40%** dari Turnitin asli.
+- Terkadang skor bisa sedikit **lebih tinggi** (karena algoritma _semantic_ mendeteksi parafrasa tingkat tinggi yang mungkin terlewat oleh Turnitin) atau sedikit **lebih rendah** (jika sumber aslinya berasal dari jurnal berbayar/database tertutup).
+- **Fluktuasi Saat Scraping Ulang**: Jika Anda memproses ulang dokumen yang sama dengan memaksa _scrape_ ulang dari internet (tanpa korpus beku), skor mungkin akan sedikit berubah-ubah. Ini sangat wajar karena bergantung pada stabilitas jaringan dan respons server kampus di detik tersebut (beberapa situs mungkin *timeout*), namun hasil skornya dijamin tidak akan jauh berbeda.
+- **Kesimpulan**: Alat ini sangat bisa diandalkan. Jika skor di sini sudah di bawah batas aman kampus (misal <20%), maka kemungkinan besar di Turnitin asli juga akan aman.
+
+### Kapan hasilnya paling akurat:
+
+- Dokumen menyalin dari sumber online publik (repositori .ac.id, jurnal open access, 123dok, dll)
+- Sumber berbahasa Indonesia (model semantic dan pencarian dioptimasi untuk ini)
+
+### Kapan hasilnya bisa meleset:
+
+- Dokumen menyalin dari jurnal berbayar (Elsevier, IEEE, Springer)
+- Dokumen menyalin dari skripsi teman yang belum dipublikasi online
+- Sumber hanya ada di database internal kampus
+
 ## Cara Kerja
 
 Alur pemrosesan (mirip Turnitin):
@@ -134,31 +160,6 @@ python app/run_test_groundtruth.py
 THRESHOLD=0.90 python app/run_test_groundtruth.py
 ```
 
-## Keterbatasan (Penting Dibaca)
-
-### Kenapa skor bisa berbeda dari Turnitin asli:
-
-1. **Indeks Turnitin tidak bisa ditiru.** Turnitin punya 100+ miliar halaman web + 1.8 miliar makalah mahasiswa yang pernah disubmit + jurnal berbayar (IEEE, Springer, Elsevier). Alat ini hanya menjangkau sumber terbuka gratis.
-2. **Sumber yang tidak online = tidak terdeteksi.** Kalau seseorang menyalin dari skripsi kating yang hanya ada di arsip kampus (tidak dipublikasi online), Turnitin mungkin mendeteksinya (karena skripsi itu pernah disubmit), tapi alat ini tidak bisa.
-3. **Network variance.** Sumber yang sedang down/timeout saat pengecekan tidak akan masuk korpus.
-
-### Akurasi skor yang bisa diharapkan:
-
-- Skor lokal memiliki tingkat akurasi yang sangat tinggi dengan selisih rata-rata (MAE) hanya **~1.40%** dari Turnitin asli.
-- Terkadang skor bisa sedikit **lebih tinggi** (karena algoritma _semantic_ mendeteksi parafrasa tingkat tinggi yang mungkin terlewat oleh Turnitin) atau sedikit **lebih rendah** (jika sumber aslinya berasal dari jurnal berbayar/database tertutup).
-- **Fluktuasi Saat Scraping Ulang**: Jika Anda memproses ulang dokumen yang sama dengan memaksa _scrape_ ulang dari internet (tanpa korpus beku), skor mungkin akan sedikit berubah-ubah. Ini sangat wajar karena bergantung pada stabilitas jaringan dan respons server kampus di detik tersebut (beberapa situs mungkin *timeout*), namun hasil skornya dijamin tidak akan jauh berbeda.
-- **Kesimpulan**: Alat ini sangat bisa diandalkan. Jika skor di sini sudah di bawah batas aman kampus (misal <20%), maka kemungkinan besar di Turnitin asli juga akan aman.
-
-### Kapan hasilnya paling akurat:
-
-- Dokumen menyalin dari sumber online publik (repositori .ac.id, jurnal open access, 123dok, dll)
-- Sumber berbahasa Indonesia (model semantic dan pencarian dioptimasi untuk ini)
-
-### Kapan hasilnya bisa meleset:
-
-- Dokumen menyalin dari jurnal berbayar (Elsevier, IEEE, Springer)
-- Dokumen menyalin dari skripsi teman yang belum dipublikasi online
-- Sumber hanya ada di database internal kampus
 
 ## Arsitektur File
 
