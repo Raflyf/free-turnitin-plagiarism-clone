@@ -159,6 +159,20 @@
     </div>
     
     <div class="section-title">SIMILARITY INDEX</div>
+    {% if data.fooled_similarity is not none %}
+    <div style="font-size: 11px; color: #888; margin-bottom: 5px;">(Skor asli &mdash; teks tersembunyi telah dibuang oleh sistem)</div>
+    
+    <div style="background-color: #f5f5f5; border: 1px solid #ddd; border-radius: 6px; padding: 16px 20px; margin: 15px 0;">
+        <div style="display: flex; align-items: baseline; gap: 12px;">
+            <span style="font-size: 36px; font-weight: 300; color: #999;">{{ data.fooled_similarity }}%</span>
+            <span style="font-size: 11px; color: #999; text-transform: uppercase; letter-spacing: 0.5px;">Skor Jika Hidden Text Lolos</span>
+        </div>
+        <div style="font-size: 11px; color: #aaa; margin-top: 6px;">
+            Skor ini menunjukkan hasil jika sistem <b>tidak</b> mendeteksi teks tersembunyi (seperti Turnitin asli).
+            Teks tersembunyi menggelembungkan jumlah kata sehingga persentase similaritas turun secara palsu.
+        </div>
+    </div>
+    {% endif %}
     
     <div class="divider-thick"></div>
     <div class="divider-thin" style="margin-top:2px;"></div>

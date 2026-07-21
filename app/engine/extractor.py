@@ -28,7 +28,8 @@ MIN_VISIBLE_FONT_SIZE = 4.0
 
 def _extract_visible_text(doc):
     """Ekstrak teks, BUANG span dengan font mungil (< 4pt) yang tak terbaca mata.
-    Mengembalikan (visible_text, hidden_word_count, any_dropped).
+    Mengembalikan (visible_text, hidden_word_count, any_dropped, hidden_spans).
+    hidden_spans: list (page_index, (x0,y0,x1,y1)) untuk highlight di report PDF.
 
     PENTING: warna putih SENGAJA tidak dipakai sebagai sinyal, karena teks putih
     dipakai secara sah untuk label di atas kotak diagram (mis. "Raw Email",
@@ -40,7 +41,8 @@ def _extract_visible_text(doc):
     visible_parts = []
     hidden_word_count = 0
     any_dropped = False
-    for page in doc:
+    hidden_spans = []
+    for page_index, page in enumerate(doc):
         pd = page.get_text("dict")
         for block in pd.get("blocks", []):
             for line in block.get("lines", []):
@@ -51,13 +53,16 @@ def _extract_visible_text(doc):
                     if span.get("size", 12.0) < MIN_VISIBLE_FONT_SIZE:
                         hidden_word_count += len(span_text.split())
                         any_dropped = True
+                        bbox = span.get("bbox")
+                        if bbox:
+                            hidden_spans.append((page_index, tuple(bbox)))
                         continue
                     visible_parts.append(span_text)
                 visible_parts.append(" ")
             visible_parts.append(" ")
-    return "".join(visible_parts), hidden_word_count, any_dropped
+    return "".join(visible_parts), hidden_word_count, any_dropped, hidden_spans
 
-def extract_text_from_pdf(filepath, exclude_quotes=True, exclude_biblio=True):
+def extract_text_from_pdf(filepath, exclude_quotes=True, exclude_biblio=True, return_hidden=False):
     """Extract text from PDF with robust error handling"""
     text = ""
     hidden_word_count = 0
@@ -67,15 +72,18 @@ def extract_text_from_pdf(filepath, exclude_quotes=True, exclude_biblio=True):
         # pakai teks hasil span; jika tidak, pakai get_text() polos (verbatim) agar
         # dokumen bersih bit-identik -> skor tidak berubah. Robust: gagal -> get_text().
         try:
-            vis_text, hidden_word_count, any_dropped = _extract_visible_text(doc)
+            vis_text, hidden_word_count, any_dropped, hidden_spans = _extract_visible_text(doc)
         except Exception:
-            vis_text, hidden_word_count, any_dropped = "", 0, False
+            vis_text, hidden_word_count, any_dropped, hidden_spans = "", 0, False, []
+        # Teks mentah (semua span, termasuk hidden) untuk skor "fooled"
+        raw_text = ""
+        for page in doc:
+            raw_text += page.get_text() + " "
+
         if any_dropped and vis_text.strip():
             text = vis_text
         else:
-            text = ""
-            for page in doc:
-                text += page.get_text() + " "
+            text = raw_text
         doc.close()
 
         if not text.strip():
@@ -93,6 +101,13 @@ def extract_text_from_pdf(filepath, exclude_quotes=True, exclude_biblio=True):
     # Normalkan huruf Cyrillic kembali ke Latin agar usahanya sia-sia
     cyrillic_to_latin = str.maketrans('асеорхуАСЕОРХУ', 'aceopxyACEOPXY')
     cleaned_text = cleaned_text.translate(cyrillic_to_latin)
+
+    if return_hidden:
+        # Bersihkan raw_text dengan cara yang sama
+        raw_cleaned = clean_text(raw_text, exclude_quotes, exclude_biblio)
+        raw_cleaned = re.sub(r'[\u200B-\u200D\uFEFF]', '', raw_cleaned)
+        raw_cleaned = raw_cleaned.translate(cyrillic_to_latin)
+        return cleaned_text, manipulation_warnings, raw_cleaned, hidden_spans
 
     return cleaned_text, manipulation_warnings
 

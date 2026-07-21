@@ -157,11 +157,24 @@ def generate_report_pdf(original_pdf_path, output_pdf_path, data):
         if blocked_overlaps_count > 0:
             print(f"[Anti-Overlap] Blokir {blocked_overlaps_count} penumpukan warna di Halaman {page_num + 1}")
 
+    # --- STEP 1.5: Highlight teks tersembunyi (hidden spans) dengan warna berbeda ---
+    # Warna: abu-abu gelap transparan dengan border magenta, agar tidak bentrok
+    # dengan warna plagiarisme (merah, hijau, biru, oranye, dll).
+    hidden_spans = data.get('hidden_spans', [])
+    if hidden_spans:
+        for page_index, bbox in hidden_spans:
+            if page_index < len(doc):
+                page = doc[page_index]
+                rect = fitz.Rect(bbox)
+                # Gambar kotak abu-abu semi-transparan di atas teks gaib
+                page.draw_rect(rect, color=(0.6, 0.0, 0.6), fill=(0.85, 0.85, 0.85), width=0.5, overlay=True)
+
     # --- STEP 2: Buat Halaman "ORIGINALITY REPORT" di akhir ---
     report_page = doc.new_page(-1, width=595, height=842) # Ukuran A4 standar
     
     y_pos = 50
     margin_left = 50
+    max_text_width = 490  # 595 - 50 - 55 (margin kiri + kanan)
     
     # Header: Nama File. Utamakan nama asli upload (data['filename']); path fisik
     # memakai UUID (mis. 94ae2154-...pdf) sehingga tak informatif di report.
@@ -171,14 +184,27 @@ def generate_report_pdf(original_pdf_path, output_pdf_path, data):
     report_page.insert_text((margin_left, y_pos), display_name, fontsize=18, fontname="helv")
     y_pos += 30
     
+    # --- Peringatan manipulasi (text-wrapped agar tidak terpotong) ---
     if 'manipulation_warnings' in data and data['manipulation_warnings']:
-        report_page.insert_text((margin_left, y_pos), "MANIPULASI TEKS TERDETEKSI:", fontsize=12, fontname="helv-bo", color=(1.0, 0.0, 0.0))
+        report_page.insert_text((margin_left, y_pos), "MANIPULASI TEKS TERDETEKSI:", fontsize=12, fontname="hebo", color=(1.0, 0.0, 0.0))
         y_pos += 20
         for warning in data['manipulation_warnings']:
-            # Peringkat merah keras
-            report_page.insert_text((margin_left + 10, y_pos), warning, fontsize=10, fontname="helv", color=(1.0, 0.0, 0.0))
-            y_pos += 15
-        y_pos += 15
+            # Text-wrap: potong teks panjang ke beberapa baris agar muat di halaman
+            words = warning.split()
+            line = ""
+            for word in words:
+                test_line = f"{line} {word}".strip()
+                # Estimasi kasar: ~5.5px per karakter pada fontsize 9
+                if len(test_line) * 5.5 > max_text_width:
+                    report_page.insert_text((margin_left + 10, y_pos), "-- " + line, fontsize=9, fontname="helv", color=(0.8, 0.0, 0.0))
+                    y_pos += 13
+                    line = word
+                else:
+                    line = test_line
+            if line:
+                report_page.insert_text((margin_left + 10, y_pos), "-- " + line, fontsize=9, fontname="helv", color=(0.8, 0.0, 0.0))
+                y_pos += 13
+        y_pos += 10
         
     # Garis tebal
     report_page.draw_line(fitz.Point(margin_left, y_pos), fitz.Point(545, y_pos), color=(0,0,0), width=2)
@@ -194,13 +220,33 @@ def generate_report_pdf(original_pdf_path, output_pdf_path, data):
     report_page.draw_line(fitz.Point(margin_left, y_pos), fitz.Point(545, y_pos), color=(0,0,0), width=0.5)
     y_pos += 40
     
-    # Skor Kemiripan Besar
+    # --- Skor Kemiripan Utama (hidden text dibuang = skor jujur) ---
     score_text = f"{int(data['total_similarity'])}%"
     report_page.insert_text((margin_left, y_pos), score_text, fontsize=48, fontname="helv")
     y_pos += 20
     
     report_page.insert_text((margin_left, y_pos), "SIMILARITY INDEX", fontsize=10, fontname="helv")
+    y_pos += 8
+    report_page.insert_text((margin_left, y_pos), "(Skor asli - teks tersembunyi telah dibuang)", fontsize=8, fontname="helv", color=(0.4, 0.4, 0.4))
     y_pos += 20
+    
+    # --- Skor Kedua: "Fooled" (jika hidden text lolos) ---
+    fooled_sim = data.get('fooled_similarity')
+    if fooled_sim is not None:
+        # Kotak info abu-abu muda
+        info_rect = fitz.Rect(margin_left, y_pos - 5, 545, y_pos + 55)
+        report_page.draw_rect(info_rect, color=(0.7, 0.7, 0.7), fill=(0.95, 0.95, 0.95), width=0.5)
+        y_pos += 10
+        
+        fooled_text = f"{fooled_sim}%"
+        report_page.insert_text((margin_left + 10, y_pos), fooled_text, fontsize=28, fontname="helv", color=(0.5, 0.5, 0.5))
+        y_pos += 15
+        report_page.insert_text((margin_left + 10, y_pos), "SKOR JIKA HIDDEN TEXT LOLOS (seperti Turnitin asli)", fontsize=9, fontname="helv", color=(0.5, 0.5, 0.5))
+        y_pos += 13
+        report_page.insert_text((margin_left + 10, y_pos), "Teks tersembunyi menggelembungkan jumlah kata sehingga persentase turun.", fontsize=8, fontname="helv", color=(0.6, 0.6, 0.6))
+        y_pos += 25
+    
+    y_pos += 5
     
     # Garis tebal
     report_page.draw_line(fitz.Point(margin_left, y_pos), fitz.Point(545, y_pos), color=(0,0,0), width=2)

@@ -2,6 +2,8 @@ import os
 import time
 import math
 import uuid
+import json
+import hashlib
 import secrets
 import urllib3
 from dotenv import load_dotenv
@@ -56,7 +58,9 @@ def process_document(file_id, filepath, original_filename, exclude_quotes=True, 
     try:
         set_progress(5, "Mengekstrak teks dari PDF...")
         print(f"[!] Mulai ekstraksi teks dari: {filepath}")
-        doc_text, manipulation_warnings = extract_text_from_pdf(filepath, exclude_quotes, exclude_biblio)
+        # return_hidden=True: dapatkan juga teks mentah (hidden ikut) + koordinat span gaib
+        extraction_result = extract_text_from_pdf(filepath, exclude_quotes, exclude_biblio, return_hidden=True)
+        doc_text, manipulation_warnings, raw_text, hidden_spans = extraction_result
         sentences = get_sentences(doc_text)
 
         # ===== METODOLOGI IDENTIK GROUNDTRUTH =====
@@ -71,17 +75,42 @@ def process_document(file_id, filepath, original_filename, exclude_quotes=True, 
             set_progress(pct, f"Mencari sumber di internet ({completed}/{total})...")
 
         print(f"[!] Mencari kandidat sumber (max_probes={INTERNET_MAX_PROBES}, metodologi groundtruth)...")
-        urls, preloaded_corpus = get_candidate_urls(sentences, max_probes=INTERNET_MAX_PROBES, progress_cb=ddg_progress)
 
-        def scrape_progress(completed, total, speed="0 KB/s"):
-            pct = 50 + int((completed / total) * 35)  # 50% -> 85%
-            if total == 0: pct = 85
-            speed_text = f" ({speed})" if speed != "0 KB/s" else ""
-            set_progress(pct, f"Mengunduh isi sumber ({completed}/{total}){speed_text}...")
+        # FROZEN CACHE (key = hash ISI teks, bukan nama file): PDF sama persis -> baca
+        # korpus beku -> skor identik tiap run (hilangkan variasi jaringan 0-2%). PDF
+        # yang isinya diparafrase -> teks beda -> hash beda -> dianggap dokumen BARU ->
+        # scrape ulang. Reuse dir frozen_corpus/ yang sama dgn run_test_groundtruth.
+        doc_hash = hashlib.md5(doc_text.encode("utf-8")).hexdigest()[:16]
+        frozen_path = os.path.join(base_dir, "frozen_corpus", f"web_{doc_hash}.json")
+        corpus = None
+        if os.path.exists(frozen_path):
+            try:
+                with open(frozen_path, encoding="utf-8") as f:
+                    corpus = json.load(f)
+                set_progress(85, "Memuat korpus beku (dokumen sudah pernah dicek)...")
+                print(f"[!] KORPUS BEKU dimuat: {len(corpus)} sumber (skor deterministik, skip scrape).")
+            except Exception as e:
+                print(f"[!] Gagal baca frozen ({e}), scrape ulang.")
+                corpus = None
 
-        print(f"[!] Mengunduh teks dari {len(urls)} kandidat (bank dipakai sbg cache)...")
-        corpus = scrape_all_candidates(urls, preloaded_corpus, progress_cb=scrape_progress)
-        print(f"[!] Korpus terkurasi utk dokumen ini: {len(corpus)} sumber.")
+        if corpus is None:
+            urls, preloaded_corpus = get_candidate_urls(sentences, max_probes=INTERNET_MAX_PROBES, progress_cb=ddg_progress)
+
+            def scrape_progress(completed, total, speed="0 KB/s"):
+                pct = 50 + int((completed / total) * 35)  # 50% -> 85%
+                if total == 0: pct = 85
+                speed_text = f" ({speed})" if speed != "0 KB/s" else ""
+                set_progress(pct, f"Mengunduh isi sumber ({completed}/{total}){speed_text}...")
+
+            print(f"[!] Mengunduh teks dari {len(urls)} kandidat (bank dipakai sbg cache)...")
+            corpus = scrape_all_candidates(urls, preloaded_corpus, progress_cb=scrape_progress)
+            print(f"[!] Korpus terkurasi utk dokumen ini: {len(corpus)} sumber.")
+            try:
+                with open(frozen_path, "w", encoding="utf-8") as f:
+                    json.dump(corpus, f, ensure_ascii=False)
+                print(f"[!] Korpus DIBEKUKAN: {os.path.basename(frozen_path)} (run berikut skor identik).")
+            except Exception as e:
+                print(f"[!] Gagal simpan frozen: {e}")
 
         set_progress(85, "Menghitung kemiripan (Algoritma N-Gram)...")
         print("[!] Menghitung similaritas dengan algoritma N-Gram Shingling...")
@@ -93,12 +122,27 @@ def process_document(file_id, filepath, original_filename, exclude_quotes=True, 
             doc_text, corpus, exclude_small, use_semantic=use_semantic,
             semantic_threshold=0.88)
 
+        # --- SKOR KEDUA: "fooled" (hidden text lolos) ---
+        # Hanya dihitung jika ada manipulasi (hidden spans terdeteksi). Menggunakan
+        # korpus yang SAMA, hanya teksnya berbeda (raw_text = termasuk hidden text).
+        # calculate_similarity cuma n-gram matching di memori -> tambah 1-2 detik saja.
+        fooled_similarity = None
+        if hidden_spans and raw_text and raw_text.strip() != doc_text.strip():
+            print("[!] Menghitung skor kedua (jika hidden text lolos)...")
+            _, fooled_sim, _ = calculate_similarity(
+                raw_text, corpus, exclude_small, use_semantic=use_semantic,
+                semantic_threshold=0.88)
+            fooled_similarity = round(fooled_sim)
+            print(f"[!] Skor tertipu (hidden text lolos): {fooled_similarity}%")
+
         data = {
             'filename': original_filename.replace('.pdf', ''),
             'total_similarity': round(total_similarity),
             'sources': sorted_sources,
             'plagiarized_sentences': plagiarized_sentences,
-            'manipulation_warnings': manipulation_warnings
+            'manipulation_warnings': manipulation_warnings,
+            'fooled_similarity': fooled_similarity,
+            'hidden_spans': hidden_spans if hidden_spans else []
         }
         
         set_progress(95, "Membangun Laporan PDF...")
@@ -215,7 +259,7 @@ def report(file_id):
             seen_domains.add(domain)
             unique_sources.append(source)
             
-        data_for_html = {k:v for k,v in data.items() if k != 'plagiarized_sentences' and k != 'sources'}
+        data_for_html = {k:v for k,v in data.items() if k not in ('plagiarized_sentences', 'sources', 'hidden_spans')}
         data_for_html['sources'] = unique_sources
         
         return render_template('report.html', data=data_for_html, file_id=file_id)
