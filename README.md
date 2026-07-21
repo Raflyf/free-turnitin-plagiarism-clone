@@ -193,7 +193,12 @@ Skor Total = (Kata Ter-match N-Gram + Kata Ter-match Semantic) / Total Kata Doku
 
 ## Changelog
 
-### v3.9 (Current) — Silent-Skip Google CSE + Terminal Progress Log
+### v4.0 (Current) — Auto-Detect Frozen Corpus & Validasi 100% Reproducible
+- **Auto-Detect Frozen Corpus UI**: Halaman localhost kini mendeteksi secara *real-time* jika file yang di-*drop* sudah memiliki korpus beku di server. Jika ada, UI menampilkan opsi animasi untuk langsung menggunakan korpus beku (proses instan) atau memaksa *scrape* ulang dari internet. Endpoint `/check_frozen` ditambahkan di backend.
+- **Tabel Validasi Konsisten (100% Frozen)**: Tabel skor di README kini mutlak dikunci menggunakan hasil korpus beku yang 100% *reproducible* (termasuk skor Andyan yang kini terkonfirmasi 18.1%). *Mean Absolute Error (MAE)* berhasil diturunkan menembus **1.40 poin persentase**.
+- **Estimasi Waktu UI Diperbaiki**: Kalkulasi estimasi pemrosesan di UI disesuaikan dengan kenyataan (kalkulasi *semantic* memakan waktu 3-6 menit meski korpus beku, sementara *scraping* memakan 15-25 menit).
+
+### v3.9 — Silent-Skip Google CSE + Terminal Progress Log
 - **Google CSE di-skip diam-diam** saat `GOOGLE_API_KEYS` / `GOOGLE_CX_ID` kosong. Tidak ada pesan apapun yang dicetak -- langsung lompat ke DuckDuckGo tanpa delay. Kode CSE **tetap dipertahankan** agar siapapun yang memiliki key bisa langsung aktifkan via `.env`.
 - **Progress log per-10 probe di terminal**: setiap 10 probe selesai (dan di akhir), terminal mencetak akumulasi sumber yang ditemukan per-API (contoh: `[API] Probe 20/100 -- 342 sumber ditemukan | DuckDuckGo:120, SemanticScholar:85, Crossref:72, ...`). Menggantikan kekosongan sebelumnya di mana terminal hanya menampilkan error.
 - Menggantikan perilaku v3.8 yang masih mencetak pesan "belum dikonfigurasi" 1x per proses.
