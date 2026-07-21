@@ -2,7 +2,7 @@
 
 Alat pengecek plagiarisme lokal gratis yang meniru perilaku Turnitin: mendeteksi kecocokan teks (N-Gram exact match) dan parafrasa (semantic similarity) terhadap sumber-sumber akademik terbuka di internet. Dibangun untuk membantu mahasiswa yang terkendala biaya mengecek plagiarisme skripsi sebelum submit ke Turnitin resmi kampus.
 
-**Bukan pengganti Turnitin** — tapi estimasi batas bawah yang akurat. Kalau di sini sudah tinggi, di Turnitin asli pasti lebih tinggi. Perbaiki dulu, hemat biaya.
+**Bukan pengganti Turnitin** — tapi memberikan estimasi skor yang **sangat akurat dan mendekati** Turnitin asli (selisih rata-rata hanya ~1.40%). Gunakan alat ini untuk mengecek dan memperbaiki draf skripsi secara gratis sebelum submit ke Turnitin resmi kampus.
 
 ## Hasil Validasi (8 Dokumen vs Turnitin Asli)
 
@@ -142,11 +142,11 @@ THRESHOLD=0.90 python app/run_test_groundtruth.py
 2. **Sumber yang tidak online = tidak terdeteksi.** Kalau seseorang menyalin dari skripsi kating yang hanya ada di arsip kampus (tidak dipublikasi online), Turnitin mungkin mendeteksinya (karena skripsi itu pernah disubmit), tapi alat ini tidak bisa.
 3. **Network variance.** Sumber yang sedang down/timeout saat pengecekan tidak akan masuk korpus.
 
-### Arah skor yang bisa diprediksi:
+### Akurasi skor yang bisa diharapkan:
 
-- Skor lokal **cenderung lebih rendah atau sama** dengan Turnitin asli (indeks lebih kecil = lebih sedikit kecocokan ditemukan)
-- Ini artinya alat ini berguna sebagai **estimasi batas bawah**: "minimal segini plagiarismenya"
-- Kalau skor lokal sudah tinggi, di Turnitin pasti lebih tinggi — perbaiki dulu
+- Skor lokal memiliki tingkat akurasi yang sangat tinggi dengan selisih rata-rata (MAE) hanya **~1.40%** dari Turnitin asli.
+- Terkadang skor bisa sedikit **lebih tinggi** (karena algoritma _semantic_ mendeteksi parafrasa tingkat tinggi yang mungkin terlewat oleh Turnitin) atau sedikit **lebih rendah** (jika sumber aslinya berasal dari jurnal berbayar/database tertutup).
+- **Kesimpulan**: Alat ini sangat bisa diandalkan. Jika skor di sini sudah di bawah batas aman kampus (misal <20%), maka kemungkinan besar di Turnitin asli juga akan aman.
 
 ### Kapan hasilnya paling akurat:
 
