@@ -158,16 +158,26 @@ def generate_report_pdf(original_pdf_path, output_pdf_path, data):
             print(f"[Anti-Overlap] Blokir {blocked_overlaps_count} penumpukan warna di Halaman {page_num + 1}")
 
     # --- STEP 1.5: Highlight teks tersembunyi (hidden spans) dengan warna berbeda ---
-    # Warna: abu-abu gelap transparan dengan border magenta, agar tidak bentrok
-    # dengan warna plagiarisme (merah, hijau, biru, oranye, dll).
+    # Warna: hitam transparan, agar mencolok dan berbeda dari warna plagiarisme
     hidden_spans = data.get('hidden_spans', [])
     if hidden_spans:
         for page_index, bbox in hidden_spans:
             if page_index < len(doc):
                 page = doc[page_index]
                 rect = fitz.Rect(bbox)
-                # Gambar kotak abu-abu semi-transparan di atas teks gaib
-                page.draw_rect(rect, color=(0.6, 0.0, 0.6), fill=(0.85, 0.85, 0.85), width=0.5, overlay=True)
+                
+                # Perbesar area bbox jika ukurannya terlalu kecil (karena font mungil)
+                # agar highlight tetap terlihat jelas oleh mata manusia
+                if rect.height < 5:
+                    rect.y0 = rect.y1 - 5
+                if rect.width < 5:
+                    rect.x1 = rect.x0 + 5
+                
+                annot = page.add_highlight_annot(rect)
+                annot.set_colors(stroke=(0.2, 0.2, 0.2))  # Abu-abu sangat gelap
+                annot.set_opacity(0.8)
+                annot.set_info(content="TEKS TERSEMBUNYI (MANIPULASI)", title="Sistem Plagiarisme")
+                annot.update()
 
     # --- STEP 2: Buat Halaman "ORIGINALITY REPORT" di akhir ---
     report_page = doc.new_page(-1, width=595, height=842) # Ukuran A4 standar
