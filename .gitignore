@@ -44,3 +44,5 @@ graphify-out/
 # Claude config & cache
 CLAUDE.md
 sim_cache.json
+.freebuff/
+.roo/

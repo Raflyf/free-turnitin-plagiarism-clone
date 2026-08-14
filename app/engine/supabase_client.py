@@ -104,12 +104,22 @@ def get_bank_urls_supabase():
         if len(first_batch) < 1000:
             return all_urls
 
-        offsets = range(1000, 120000, 1000)
+        current_offset = 1000
+        batch_step = 16
         with concurrent.futures.ThreadPoolExecutor(max_workers=16) as executor:
-            for chunk in executor.map(fetch_chunk, offsets):
-                if not chunk:
+            while True:
+                offsets = [current_offset + i * 1000 for i in range(batch_step)]
+                results = list(executor.map(fetch_chunk, offsets))
+                has_data = False
+                for chunk in results:
+                    if chunk:
+                        all_urls.update(chunk)
+                        has_data = True
+                        if len(chunk) < 1000:
+                            return all_urls
+                if not has_data:
                     break
-                all_urls.update(chunk)
+                current_offset += batch_step * 1000
                 
         return all_urls
     except Exception as e:

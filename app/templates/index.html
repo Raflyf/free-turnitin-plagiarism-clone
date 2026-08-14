@@ -404,14 +404,13 @@
 <div class="main-container">
     <div class="top-title">CEK PLAGIASI NO-REPOSITORY</div>
     
-    <div class="card">
-        <div class="upload-area" onclick="document.getElementById('fileInput').click()" id="dropZone">
+        <div class="upload-area" onclick="document.getElementById('fileInput').click()" id="dropZone" role="button" tabindex="0" aria-label="Area unggah dokumen">
             <div class="upload-buttons">
-                <button class="btn btn-blue" onclick="event.stopPropagation(); document.getElementById('fileInput').click()">
+                <button class="btn btn-blue" aria-label="Unggah File Dokumen" onclick="event.stopPropagation(); document.getElementById('fileInput').click()">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
                     Unggah File
                 </button>
-                <button class="btn btn-red" onclick="event.stopPropagation(); resetFile()">
+                <button class="btn btn-red" aria-label="Hapus File Terpilih" onclick="event.stopPropagation(); resetFile()">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
                     Hapus Semua
                 </button>
@@ -421,7 +420,7 @@
             <p class="upload-subtitle" id="fileSub">TARIK FILE MU KESINI / KLIK AJA DISINI</p>
             <p class="upload-ext" id="fileExt">Hanya menerima format .pdf, .docx, .doc</p>
             
-            <input type="file" id="fileInput" accept=".pdf, .docx, .doc" onchange="fileSelected()">
+            <input type="file" id="fileInput" accept=".pdf, .docx, .doc" onchange="fileSelected()" aria-label="Input berkas dokumen">
         </div>
         
         <div class="filter-section">
@@ -481,21 +480,21 @@
     </div>
 </div>
 
-<div class="loading-overlay" id="loadingOverlay">
-    <div class="loader"></div>
+<div class="loading-overlay" id="loadingOverlay" role="dialog" aria-modal="true" aria-labelledby="loadingTitle">
+    <div class="loader" role="progressbar" aria-label="Loading animation"></div>
     <h3 style="color: #333; margin: 0;" id="loadingTitle">Memproses Dokumen...</h3>
-    <p style="color: #666; font-size: 14px;" id="loadingSubtitle">Mesin sedang mencari kecocokan ke ratusan sumber web.</p>
+    <p style="color: #666; font-size: 14px;" id="loadingSubtitle" role="status" aria-live="polite">Mesin sedang mencari kecocokan ke ratusan sumber web.</p>
     
-    <div style="width: 80%; max-width: 400px; background-color: #e5e7eb; border-radius: 10px; margin-top: 20px; overflow: hidden; display: none;" id="progressContainer">
+    <div style="width: 80%; max-width: 400px; background-color: #e5e7eb; border-radius: 10px; margin-top: 20px; overflow: hidden; display: none;" id="progressContainer" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
         <div id="progressBar" style="width: 0%; height: 20px; background-color: #f97316; transition: width 0.3s ease;"></div>
     </div>
     
-    <div style="display: flex; justify-content: space-between; width: 80%; max-width: 400px; margin-top: 8px; display: none;" id="progressTextContainer">
+    <div style="display: flex; justify-content: space-between; width: 80%; max-width: 400px; margin-top: 8px; display: none;" id="progressTextContainer" aria-live="polite">
         <span id="progressText" style="color: #666; font-size: 13px; font-weight: bold;">0%</span>
         <span id="timerText" style="color: #ef4444; font-size: 13px; font-weight: bold;">00:00</span>
     </div>
 
-    <button id="cancelBtn" onclick="cancelProcessing()" style="margin-top: 25px; padding: 10px 24px; background-color: #ef4444; color: white; border: none; border-radius: 8px; font-weight: bold; font-size: 13px; cursor: pointer; transition: all 0.2s; box-shadow: 0 2px 6px rgba(239,68,68,0.3);">
+    <button id="cancelBtn" aria-label="Batalkan proses pengecekan" onclick="cancelProcessing()" style="margin-top: 25px; padding: 10px 24px; background-color: #ef4444; color: white; border: none; border-radius: 8px; font-weight: bold; font-size: 13px; cursor: pointer; transition: all 0.2s; box-shadow: 0 2px 6px rgba(239,68,68,0.3);">
         BATALKAN PROSES
     </button>
 </div>

@@ -25,6 +25,7 @@ def _get_cache_conn():
     conn.execute("PRAGMA journal_mode=WAL;")
     conn.execute("PRAGMA synchronous=NORMAL;")
     conn.execute("CREATE TABLE IF NOT EXISTS cache (query_hash TEXT PRIMARY KEY, data TEXT, timestamp REAL)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_cache_query_time ON cache(query_hash, timestamp)")
     return conn
 
 def get_cache_key(query):
