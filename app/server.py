@@ -336,12 +336,22 @@ _CONCURRENCY_SEMAPHORE = threading.Semaphore(4)
 
 @app.before_request
 def csrf_protect():
-    # C4 & H-F1 Fix: Light CSRF protection token validation for POST endpoints
-    if request.method == "POST" and not request.path.startswith("/upload"):
+    # Pastikan sesi selalu memiliki csrf_token
+    if "csrf_token" not in session:
+        session["csrf_token"] = secrets.token_hex(32)
+    # Validasi CSRF wajib untuk setiap request mutasi POST
+    if request.method == "POST":
         token = request.headers.get("X-CSRFToken") or request.form.get("csrf_token")
         expected_token = session.get("csrf_token")
-        if token and expected_token and token != expected_token:
+        if not token or not expected_token or token != expected_token:
             return jsonify({'error': 'CSRF token validation failed'}), 403
+
+@app.route('/csrf-token', methods=['GET'])
+def get_csrf_token():
+    """Endpoint untuk API automation / CLI batch runner mengambil token sesi."""
+    if "csrf_token" not in session:
+        session["csrf_token"] = secrets.token_hex(32)
+    return jsonify({'csrf_token': session['csrf_token']})
 
 @app.context_processor
 def inject_csrf_token():

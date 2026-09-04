@@ -25,3 +25,6 @@
 - [x] Membaca hasil validasi di file Markdown yang digenerate oleh skrip.
 - [x] Update `README.md` dan `DOKUMENTASI.md` dengan fakta _in-sample_ MAE 1.38% tanpa klaim berlebihan (overclaim), serta menambahkan keterangan kelemahan sistem (overfitting risks).
 - [x] Cross-check ulang isi `docs/AUDIT_FINAL.md` untuk perbaikan yang terlewat dari `to_do_list.md`.
+- [x] Sinkronisasi workspace dengan upstream GitHub `origin/main` secara non-destruktif.
+- [x] Audit mendalam file-by-file dan pengetatan keamanan (CSRF validation, safe resource cleanup, trailing attribution fix, dead code elimination).
+- [x] Penyelarasan virtual environment ke `D:\skripsi\skripsi_spam\Code_Spam_Email\.venv\Scripts\python.exe`.

@@ -222,9 +222,18 @@ class SimilarityCalculator:
                 current_phrase = []
                 
         if len(current_phrase) >= NGRAM_SIZE:
+            phrase_text = " ".join(current_phrase)
+            p_ngrams = set(get_ngrams(phrase_text, n=NGRAM_SIZE))
+            best_source_id = 1
+            best_overlap = 0
+            for idx, source in enumerate(top_sources):
+                olap = len(p_ngrams.intersection(source.get('overlap_ngrams', set())))
+                if olap > best_overlap:
+                    best_overlap = olap
+                    best_source_id = idx + 1
             plagiarized_sentences_data.append({
-                'text': " ".join(current_phrase),
-                'source_id': 1
+                'text': phrase_text,
+                'source_id': best_source_id
             })
 
         for s in sorted_sources:

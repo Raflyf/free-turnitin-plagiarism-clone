@@ -502,6 +502,7 @@
 <script>
     let selectedFile = null;
     let frozenDetected = false;
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
 
     // Theme Toggle Logic
     function toggleTheme() {
@@ -591,7 +592,11 @@
         const formData = new FormData();
         formData.append('file', file);
 
-        fetch('/check_frozen', { method: 'POST', body: formData })
+        fetch('/check_frozen', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrfToken },
+            body: formData
+        })
             .then(r => r.json())
             .then(data => {
                 if (data.exists) {
@@ -652,7 +657,10 @@
     function cancelProcessing() {
         if (confirm("Apakah Anda yakin ingin membatalkan proses analisis ini?")) {
             if (currentFileId) {
-                fetch(`/cancel/${currentFileId}`, { method: 'POST' })
+                fetch(`/cancel/${currentFileId}`, {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': csrfToken }
+                })
                     .then(() => {
                         clearInterval(checkInterval);
                         clearInterval(timerInterval);
@@ -713,6 +721,7 @@
 
         fetch('/upload', {
             method: 'POST',
+            headers: { 'X-CSRFToken': csrfToken },
             body: formData
         })
         .then(response => response.json())

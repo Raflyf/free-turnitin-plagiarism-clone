@@ -350,8 +350,10 @@ def generate_report_pdf(original_pdf_path, output_pdf_path, data):
             report_page.draw_line(fitz.Point(margin_left, y_pos - 15), fitz.Point(545, y_pos - 15), color=(0.9, 0.9, 0.9), width=1)
     
     # Save the modified document
-    doc.save(output_pdf_path)
-    doc.close()
+    try:
+        doc.save(output_pdf_path)
+    finally:
+        doc.close()
     return output_pdf_path
 
 def draw_badge(page, inst, source_id, color):

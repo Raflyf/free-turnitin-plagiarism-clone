@@ -9,37 +9,40 @@ import json
 import uuid
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-# test_documents berada di dalam folder app/ yang sama
+# test_documents berada di dalam folder app/
 FOLDER = os.path.join(BASE_DIR, "test_documents")
-if not os.path.exists(FOLDER):
-    FOLDER = os.path.join(BASE_DIR, "app", "test_documents")
-import socket
-try:
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    s.connect(("8.8.8.8", 80))
-    local_ip = s.getsockname()[0]
-    s.close()
-except:
-    local_ip = "127.0.0.1"
+os.makedirs(FOLDER, exist_ok=True)
 
+URL_CSRF = "http://127.0.0.1:5001/csrf-token"
 URL_UPLOAD = "http://127.0.0.1:5001/upload"
 URL_STATUS = "http://127.0.0.1:5001/status/"
 
-files = os.listdir(FOLDER)
+files = [f for f in os.listdir(FOLDER) if f.lower().endswith(('.pdf', '.docx', '.doc'))]
+if not files:
+    print(f"[INFO] Tidak ada dokumen uji (.pdf, .docx, .doc) ditemukan di: {FOLDER}")
+    print("[INFO] Silakan letakkan dokumen uji di folder tersebut untuk pengujian batch berulang.")
+    exit(0)
+
 results = []
 
 for idx, filename in enumerate(files):
-    if not filename.endswith(('.pdf', '.docx', '.doc')):
-        continue
-
     filepath = os.path.join(FOLDER, filename)
     print(f"\n[{idx+1}/{len(files)}] Memproses {filename} ...")
 
     session = requests.Session()
+    csrf_token = ""
+    try:
+        csrf_resp = session.get(URL_CSRF, timeout=5)
+        if csrf_resp.status_code == 200:
+            csrf_token = csrf_resp.json().get('csrf_token', '')
+    except Exception as err:
+        print(f"    [!] Peringatan: Gagal memperoleh CSRF token ({err})")
+
+    headers = {'X-CSRFToken': csrf_token} if csrf_token else {}
     with open(filepath, 'rb') as f:
         # Gunakan force_scrape='false' agar menggunakan frozen_corpus yg sudah terkumpul,
         # sehingga pengujian threshold baru lebih cepat dan konsisten.
-        resp = session.post(URL_UPLOAD, files={'file': f}, data={
+        resp = session.post(URL_UPLOAD, files={'file': f}, headers=headers, data={
             'force_scrape': 'false',
             'use_semantic': 'true',
             'exclude_quotes': 'true',

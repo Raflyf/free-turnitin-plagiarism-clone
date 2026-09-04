@@ -6,6 +6,7 @@ from engine.web_scraper import get_candidate_urls, scrape_all_candidates
 from engine.shingling import calculate_similarity
 
 BASE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "test_documents")
+os.makedirs(BASE, exist_ok=True)
 FROZEN = os.path.join(os.path.dirname(os.path.abspath(__file__)), "frozen_corpus")
 os.makedirs(FROZEN, exist_ok=True)
 

@@ -12,8 +12,12 @@ cd /d "%~dp0"
 
 REM 1. Cek atau deteksi Python & Venv
 set "PYTHON_CMD="
-if exist ".venv\Scripts\python.exe" (
-    set "PYTHON_CMD=.venv\Scripts\python.exe"
+if exist "D:\skripsi\skripsi_spam\Code_Spam_Email\.venv\Scripts\python.exe" (
+    set "PYTHON_CMD=D:\skripsi\skripsi_spam\Code_Spam_Email\.venv\Scripts\python.exe"
+) else if exist "D:\code\skripsi_spam\Code_Spam_Email\.venv\Scripts\python.exe" (
+    set "PYTHON_CMD=D:\code\skripsi_spam\Code_Spam_Email\.venv\Scripts\python.exe"
+) else if exist "%~dp0.venv\Scripts\python.exe" (
+    set "PYTHON_CMD=%~dp0.venv\Scripts\python.exe"
 )
 
 if "%PYTHON_CMD%"=="" (
@@ -68,7 +72,7 @@ if "%PYTHON_CMD%"=="" (
         exit /b 1
     )
     
-    set "PYTHON_CMD=.venv\Scripts\python.exe"
+    set "PYTHON_CMD=%~dp0.venv\Scripts\python.exe"
     
     echo [2/3] Mengunduh & menginstall modul dependensi (requirements.txt)...
     "%PYTHON_CMD%" -m pip install --upgrade pip > NUL 2>&1

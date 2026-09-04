@@ -137,3 +137,14 @@ Untuk menjalankan evaluasi batch penuh di lingkungan GPU CUDA:
 ```powershell
 & "D:/skripsi/skripsi_spam/Code_Spam_Email/.venv/Scripts/python.exe" app/run_batch.py
 ```
+
+---
+
+## 9. Pembaruan Sistem & Hardening Keamanan (September 2026)
+
+Pembaruan menyeluruh diterapkan pada modul inti tanpa mengubah konstanta maupun formula akurasi skor:
+1. **Pencegahan CSRF Berlapis:** Validasi `csrf_protect` diperketat dengan mewajibkan header `X-CSRFToken` pada setiap request mutasi `POST` (`/upload`, `/check_frozen`, `/cancel/<id>`) dan menyediakan endpoint `GET /csrf-token` untuk runner batch.
+2. **Koreksi Atribusi Frasa:** Perbaikan kalkulasi `best_source_id` pada frasa yang berakhir di batas dokumen (`shingling.py`), menghilangkan atribusi hardcoded ke ID 1.
+3. **Pemberesan Descriptor Berkas (Safe File Descriptors):** Penutupan objek `fitz.Document` dipindahkan ke dalam blok `finally` pada `extractor.py` dan `pdf_generator.py` untuk mencegah kebocoran *file descriptor* pada PDF rusak.
+4. **Pembersihan Dead Code (Ponytail Protocol):** Pemangkasan ~200 baris kode tak terpakai pada `web_scraper.py` (5 fungsi fetch lama dan 1 wrapper usang) guna memelihara performa dan kemudahan perawatan basis kode.
+5. **Ketahanan Runner Batch & Launcher:** Dukungan path absolut pada `run.bat` dan `run.sh` serta penanganan direktori otomatis `os.makedirs(FOLDER, exist_ok=True)` pada `run_batch.py` dan `run_test_groundtruth.py`.

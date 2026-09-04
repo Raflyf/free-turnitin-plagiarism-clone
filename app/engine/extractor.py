@@ -84,6 +84,7 @@ def extract_text_from_pdf(filepath: str, exclude_quotes: bool = True, exclude_bi
     """Extract text from PDF with robust error handling"""
     text = ""
     hidden_word_count = 0
+    doc = None
     try:
         doc = fitz.open(filepath)
         # Deteksi teks font-mungil (anti-cheat). HANYA bila ada yang dibuang kita
@@ -106,13 +107,15 @@ def extract_text_from_pdf(filepath: str, exclude_quotes: bool = True, exclude_bi
             text = vis_text
         else:
             text = raw_text
-        doc.close()
 
         if not text.strip():
             raise Exception("PDF appears to be empty or contains only images")
 
     except Exception as e:
         raise Exception(f"Failed to extract PDF: {str(e)}")
+    finally:
+        if doc is not None:
+            doc.close()
 
     manipulation_warnings = detect_manipulation(text, hidden_word_count)
     
