@@ -96,7 +96,6 @@ def init_bank_db():
                     cur.executemany("INSERT OR IGNORE INTO corpus (url, text) VALUES (?, ?)", items)
                     conn.commit()
                     logger.info(f"[Bank] Berhasil migrasi {len(items)} sumber ke bank.db SQLite.")
-                    os.replace(_BANK_JSON_PATH, _BANK_JSON_PATH + ".bak")
                 except Exception as e:
                     logger.info("[Bank] Warning migrasi: %s", e)
 

@@ -159,6 +159,9 @@ def save_to_corpus_bank_supabase(new_corpus):
         if isinstance(t, str) and len(t) > 150:
             clean_u = _clean_str(u)
             clean_t = _clean_str(t)
+            # Batasi teks per URL ke 250.000 karakter agar tidak melebihi buffer REST API / Supabase payload limit (10MB)
+            if len(clean_t) > 250000:
+                clean_t = clean_t[:250000]
             domain = _clean_str(urllib.parse.urlparse(clean_u).netloc)
             if clean_u and clean_t:
                 items.append({"url": clean_u, "domain": domain, "text_content": clean_t})
@@ -171,8 +174,9 @@ def save_to_corpus_bank_supabase(new_corpus):
     url = f"{SUPABASE_URL}/rest/v1/corpus_bank?on_conflict=url"
     headers = {"Prefer": "resolution=ignore-duplicates"}
     
-    for i in range(0, len(items), 50):
-        batch = items[i:i+50]
+    batch_size = 25
+    for i in range(0, len(items), batch_size):
+        batch = items[i:i+batch_size]
         try:
             resp = _request_with_retry("POST", url, json=batch, headers=headers, timeout=20.0, max_retries=2)
             if resp and resp.status_code in (200, 201, 409):
