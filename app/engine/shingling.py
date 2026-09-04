@@ -343,7 +343,9 @@ class SimilarityCalculator:
                 sorted_sources = sorted(list(sources_report.values()), key=lambda x: x['sort_score'], reverse=True)
                 top_sources = sorted_sources[:20]
         
-        total_similarity = float((sum(is_matched_global) / self.total_doc_words) * 100.0)
+        semantic_additional_pct = (semantic_plagiarized_words / self.total_doc_words * 100.0) if self.total_doc_words else 0.0
+        raw_combined_similarity = float((sum(is_matched_global) / self.total_doc_words) * 100.0)
+        total_similarity = raw_combined_similarity
 
         # --- Open Source Calibration ---
         # Menggunakan reduksi flat -1.2% agar tidak over-penalize dokumen berskor tinggi
@@ -364,10 +366,17 @@ class SimilarityCalculator:
             if not display_sources and total_similarity >= 1.0:
                 display_sources = sorted_sources[:10]
 
+        self.ngram_similarity = ngram_similarity
+        self.semantic_similarity = semantic_additional_pct
+        self.raw_similarity = raw_combined_similarity
+        self.calibrated_similarity = total_similarity
+
         logger.info("===== DETECTION SUMMARY =====")
-        logger.info("Raw N-Gram & Semantic detection calibrated with ratio %.3f", calibration_ratio)
-        logger.info("Total similarity (calibrated): %.2f%%", total_similarity)
-        logger.info("Sumber ditampilkan (>=1%%): %d dari %d sumber ber-overlap", len(display_sources), len(sorted_sources))
+        logger.info("Layer 1 (N-Gram Exact Match)       : %.2f%%", ngram_similarity)
+        logger.info("Layer 2 (Semantic Paraphrase Extra): +%.2f%%", semantic_additional_pct)
+        logger.info("Total Raw Similarity (Layer 1 + 2) : %.2f%%", raw_combined_similarity)
+        logger.info("Final Calibrated Similarity (-1.2%): %.2f%%", total_similarity)
+        logger.info("Sumber ditampilkan (>=1%%)          : %d dari %d sumber ber-overlap", len(display_sources), len(sorted_sources))
 
         return display_sources, total_similarity, plagiarized_sentences_data
 

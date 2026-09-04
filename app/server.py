@@ -32,7 +32,7 @@ import threading
 import subprocess
 from engine.extractor import extract_text_auto, get_sentences
 from engine.web_scraper import get_candidate_urls, scrape_all_candidates, load_corpus_bank
-from engine.shingling import calculate_similarity
+from engine.shingling import calculate_similarity, SimilarityCalculator
 from engine.pdf_generator import generate_report_pdf
 from engine.supabase_client import save_job_status_supabase, get_job_status_supabase
 
@@ -272,9 +272,11 @@ def process_document(file_id, filepath, original_filename, exclude_quotes=True, 
         # run_test_groundtruth.py, sehingga skor dokumen tervalidasi konsisten saat
         # dites di localhost (korpus sama-sama terkurasi, bukan bank mentah).
         
-        sorted_sources, total_similarity, plagiarized_sentences = calculate_similarity(
-            doc_text, corpus, exclude_small, use_semantic=use_semantic,
-            semantic_threshold="auto", is_cancelled_cb=check_cancelled)
+        calc = SimilarityCalculator(doc_text, corpus)
+        calc.set_exclude_small(exclude_small)
+        calc.set_semantic(use_semantic, threshold="auto")
+        calc.set_cancel_callback(check_cancelled)
+        sorted_sources, total_similarity, plagiarized_sentences = calc.calculate()
         if check_cancelled(): return
 
         # --- SKOR KEDUA: "fooled" (hidden text lolos) ---
@@ -293,6 +295,9 @@ def process_document(file_id, filepath, original_filename, exclude_quotes=True, 
         data = {
             'filename': original_filename.replace('.pdf', ''),
             'total_similarity': round(total_similarity),
+            'ngram_similarity': round(getattr(calc, 'ngram_similarity', total_similarity), 2),
+            'semantic_similarity': round(getattr(calc, 'semantic_similarity', 0.0), 2),
+            'raw_similarity': round(getattr(calc, 'raw_similarity', total_similarity), 2),
             'sources': sorted_sources,
             'plagiarized_sentences': plagiarized_sentences,
             'manipulation_warnings': manipulation_warnings,
