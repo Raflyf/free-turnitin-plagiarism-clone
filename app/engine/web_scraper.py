@@ -6,6 +6,7 @@ import time
 import random
 import requests
 import warnings
+import urllib.parse
 import urllib3
 from bs4 import BeautifulSoup, XMLParsedAsHTMLWarning
 import concurrent.futures
@@ -89,8 +90,13 @@ def _get_download_bytes():
     with _byte_lock:
         return _global_download_bytes
 
+_bank_initialized = False
+
 def init_bank_db():
     """Inisialisasi tabel SQLite3 dan lakukan auto-migrasi dari bank.json jika ada."""
+    global _bank_initialized
+    if _bank_initialized:
+        return
     os.makedirs(os.path.dirname(_BANK_DB_PATH), exist_ok=True)
     with _bank_lock:
         with closing(_sqlite3.connect(_BANK_DB_PATH)) as conn:
@@ -98,8 +104,10 @@ def init_bank_db():
             cur.execute("CREATE TABLE IF NOT EXISTS corpus (url TEXT PRIMARY KEY, text TEXT)")
             conn.commit()
             
-            # Migrasi otomatis jika bank.json versi lama ada
-            if os.path.exists(_BANK_JSON_PATH):
+            # Migrasi otomatis HANYA jika bank.db masih kosong dan bank.json ada
+            cur.execute("SELECT COUNT(*) FROM corpus")
+            total = cur.fetchone()[0]
+            if total == 0 and os.path.exists(_BANK_JSON_PATH):
                 try:
                     logger.info("[Bank] Mengimpor data lama dari bank.json ke SQLite bank.db...")
                     with open(_BANK_JSON_PATH, "r", encoding="utf-8") as f:
@@ -110,6 +118,7 @@ def init_bank_db():
                     logger.info(f"[Bank] Berhasil migrasi {len(items)} sumber ke bank.db SQLite.")
                 except Exception as e:
                     logger.info("[Bank] Warning migrasi: %s", e)
+        _bank_initialized = True
 
 def get_bank_urls() -> Set[str]:
     """Mengembalikan set URL yang tersimpan di bank.db lokal & Supabase (instan <1ms)."""
@@ -1281,14 +1290,48 @@ def scrape_url(url):
                 text = re.sub(r'\s+', ' ', text).strip()
                 return url, text, total_bytes
             else:
-                # Parsing HTML biasa (Fast Scraping tanpa Deep PDF Crawl yang lambat)
+                # Parsing HTML (Landing Page Repositori & Web Publik)
                 # Hindari res.apparent_encoding karena chardet sangat lambat (O(N)) pada file besar.
                 enc = res.encoding if res.encoding else 'utf-8'
                 res_text = content.decode(enc, errors='ignore')
                 soup = BeautifulSoup(res_text, 'html.parser')
+
+                # [DEEP PDF CRAWLER] Cari tombol Download PDF di halaman repositori kampus (EPrints, DSpace, OJS)
+                pdf_links = []
+                for a in soup.find_all('a', href=True):
+                    href = a.get('href', '').strip()
+                    href_lower = href.lower()
+                    if href_lower.endswith('.pdf') or '/download/' in href_lower or '/bitstream/' in href_lower or '/article/download/' in href_lower or '/article/view/' in href_lower:
+                        if href.startswith('/'):
+                            href = urllib.parse.urljoin(url, href)
+                        if href not in pdf_links and href.startswith('http') and is_safe_url(href):
+                            pdf_links.append(href)
+
+                pdf_text = ""
+                if pdf_links:
+                    import fitz
+                    # Ambil maksimal 2 file PDF per landing page untuk efisiensi
+                    for pdf_url in pdf_links[:2]:
+                        try:
+                            pdf_res = _get_session().get(pdf_url, timeout=12, verify=False, headers=headers)
+                            if pdf_res.status_code == 200:
+                                total_bytes += len(pdf_res.content)
+                                if 'application/pdf' in pdf_res.headers.get('Content-Type', '').lower() or pdf_res.content.startswith(b'%PDF'):
+                                    pdf_doc = fitz.open(stream=pdf_res.content, filetype="pdf")
+                                    try:
+                                        for page_num, page in enumerate(pdf_doc):
+                                            if page_num >= 30: break
+                                            pdf_text += page.get_text() + " "
+                                    finally:
+                                        pdf_doc.close()
+                        except Exception:
+                            pass
+
                 for tag in soup(["script", "style", "nav", "footer", "header", "aside", "menu"]):
                     tag.decompose()
                 text = soup.get_text(separator=' ')
+                if pdf_text:
+                    text = text + " " + pdf_text
                 text = re.sub(r'\s+', ' ', text).strip()
                 return url, text, total_bytes
     except Exception as e:
