@@ -56,3 +56,17 @@ docs/*
 SETUP_GOOGLE_API.md
 catatan_sistem.md
 /run_batch.py
+
+# Runtime frozen corpus (keep 11 baseline files tracked)
+app/frozen_corpus/*.json
+!app/frozen_corpus/web_15210103_MUHAMMAD_IHSAN_PERMANA_SKR_dd8d3c84f08848ef.json
+!app/frozen_corpus/web_15210233_TsauraHalwaQur_ani-2_13_19b365d6c5160dde.json
+!app/frozen_corpus/web_Rafly_FIrmansyah_Skripsi_F_0d9a3d89188f27ae.json
+!app/frozen_corpus/web_SKRIPSI_ANDYAN_AGUNG_MAULANA_23_9583c5008643b13f.json
+!app/frozen_corpus/web_SKRIPSI_FIKRI_FIRDAUS-15220792_14_46a443e60bf27391.json
+!app/frozen_corpus/web_Skripsi_Laila_Romadona_FIX__be_b116569a1d6ac590.json
+!app/frozen_corpus/web_Skripsi_Melani_15220760_19_03ae6df7fdbf3665.json
+!app/frozen_corpus/web_hesti_skripsi_final_before_commercial_standard_32ba27ce53eb6028.json
+!app/frozen_corpus/web_new_Skripsi_Laila_Romadona_FIX__9baaa81917037f14.json
+!app/frozen_corpus/web_skripsi_1522078_dias_maulana_23_97b5ea65290db87d.json
+!app/frozen_corpus/web_tesyar___skripsi_8_9d8b23710c1dd44e.json
