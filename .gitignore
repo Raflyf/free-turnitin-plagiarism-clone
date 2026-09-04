@@ -47,3 +47,11 @@ sim_cache.json
 .freebuff/
 .roo/
 .agents/
+
+# Documentation and loose files
+docs/
+*.doc
+*.docx
+SETUP_GOOGLE_API.md
+catatan_sistem.md
+/run_batch.py
