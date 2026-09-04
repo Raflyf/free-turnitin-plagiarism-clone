@@ -11,7 +11,22 @@ import time
 import hashlib
 import json
 import os
+import warnings
+import urllib3
 from pathlib import Path
+
+# Nonaktifkan peringatan SSL & RuntimeWarning
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+warnings.filterwarnings("ignore", category=urllib3.exceptions.InsecureRequestWarning)
+try:
+    import requests.packages.urllib3.exceptions
+    requests.packages.urllib3.disable_warnings(requests.packages.urllib3.exceptions.InsecureRequestWarning)
+    warnings.filterwarnings("ignore", category=requests.packages.urllib3.exceptions.InsecureRequestWarning)
+except Exception:
+    pass
+
+warnings.filterwarnings("ignore", category=RuntimeWarning, message=".*duckduckgo_search.*")
+warnings.filterwarnings("ignore", category=RuntimeWarning, message=".*renamed to.*")
 
 import sqlite3
 import threading
@@ -191,8 +206,14 @@ def search_duckduckgo_html(query, max_results=10):
     try:
         try:
             from ddgs import DDGS
+            ddgs_maker = DDGS
         except ImportError:
-            from duckduckgo_search import DDGS
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                from duckduckgo_search import DDGS
+                ddgs_maker = DDGS
+            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+            warnings.filterwarnings("ignore", category=urllib3.exceptions.InsecureRequestWarning)
         import time
         
         # Ambil 8 kata saja, JANGAN gunakan quotes "" karena spasi/newline dari ekstraksi PDF bisa menggagalkan exact match!
@@ -201,7 +222,10 @@ def search_duckduckgo_html(query, max_results=10):
         # Delay singkat acak untuk menghindari rate limit agresif
         time.sleep(0.5)
         
-        with DDGS() as ddgs:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            ddgs_instance = ddgs_maker()
+        with ddgs_instance as ddgs:
             results = list(ddgs.text(search_query, max_results=max_results))
             
             for res in results:

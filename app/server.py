@@ -8,10 +8,20 @@ import secrets
 import urllib3
 import glob
 import re
+import warnings
 from dotenv import load_dotenv
 
-# Nonaktifkan peringatan SSL (banyak web kampus SSL-nya kedaluwarsa)
+# Nonaktifkan peringatan SSL (banyak web kampus SSL-nya kedaluwarsa) & pesan library
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+warnings.filterwarnings("ignore", category=urllib3.exceptions.InsecureRequestWarning)
+try:
+    import requests.packages.urllib3.exceptions
+    requests.packages.urllib3.disable_warnings(requests.packages.urllib3.exceptions.InsecureRequestWarning)
+    warnings.filterwarnings("ignore", category=requests.packages.urllib3.exceptions.InsecureRequestWarning)
+except Exception:
+    pass
+warnings.filterwarnings("ignore", category=RuntimeWarning, message=".*duckduckgo_search.*")
+warnings.filterwarnings("ignore", category=RuntimeWarning, message=".*renamed to.*")
 
 # Load API keys from .env file FIRST before anything else uses them
 load_dotenv()

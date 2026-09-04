@@ -48,8 +48,9 @@ sim_cache.json
 .roo/
 .agents/
 
-# Documentation and loose files
-docs/
+# Documentation and internal logs
+docs/*
+!docs/evaluation.md
 *.doc
 *.docx
 SETUP_GOOGLE_API.md

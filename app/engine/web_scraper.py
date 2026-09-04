@@ -6,12 +6,24 @@ import time
 import random
 import requests
 import warnings
+import urllib3
 from bs4 import BeautifulSoup, XMLParsedAsHTMLWarning
 import concurrent.futures
 from concurrent.futures import ThreadPoolExecutor
 
-# Sembunyikan peringatan jika situs web yang di-scrape berupa XML/RSS
+# Nonaktifkan peringatan SSL (banyak web kampus SSL-nya kedaluwarsa) & parser XML
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+warnings.filterwarnings("ignore", category=urllib3.exceptions.InsecureRequestWarning)
+try:
+    import requests.packages.urllib3.exceptions
+    requests.packages.urllib3.disable_warnings(requests.packages.urllib3.exceptions.InsecureRequestWarning)
+    warnings.filterwarnings("ignore", category=requests.packages.urllib3.exceptions.InsecureRequestWarning)
+except Exception:
+    pass
+
 warnings.filterwarnings("ignore", category=XMLParsedAsHTMLWarning)
+warnings.filterwarnings("ignore", category=RuntimeWarning, message=".*duckduckgo_search.*")
+warnings.filterwarnings("ignore", category=RuntimeWarning, message=".*renamed to.*")
 logging.getLogger("duckduckgo_search").setLevel(logging.ERROR)
 logging.getLogger("ddgs").setLevel(logging.ERROR)
 
@@ -386,7 +398,7 @@ def fetch_crossref(probe, cutoff_year=None):
                     urls_found.append(p_url)
                     texts_found.append(combined_text)
     except Exception as e:
-        logger.warning(f"Warning: API/Scraper error -> {e}")
+        logger.debug("CrossRef API error: %s", e)
     return urls_found, texts_found
 
 def fetch_openalex(probe, cutoff_year=None):
@@ -429,7 +441,7 @@ def fetch_openalex(probe, cutoff_year=None):
                     abstract_text = " ".join([w[1] for w in word_index])
                 texts_found.append((title + " " + abstract_text).strip())
     except Exception as e:
-        logger.warning(f"OpenAlex API error: {e}")
+        logger.debug("OpenAlex API error: %s", e)
     return urls_found, texts_found
 
 def fetch_garuda(probe, cutoff_year=None):
@@ -459,13 +471,17 @@ def fetch_ddgs(probe, cutoff_year=None):
     """Mencari website publik biasa via DuckDuckGo, dengan Prioritas Situs Kampus/Jurnal"""
     urls_found = []
     try:
-        # Library duckduckgo_search lama (<=8.x) sudah mati (return 0). Utamakan paket
-        # baru `ddgs`; fallback ke nama lama hanya bila paket baru tidak terpasang.
+        # Utamakan paket baru `ddgs`; isolasi peringatan fallback jika hanya ada `duckduckgo_search`
         try:
             from ddgs import DDGS
+            ddgs = DDGS()
         except ImportError:
-            from duckduckgo_search import DDGS
-        ddgs = DDGS()
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                from duckduckgo_search import DDGS
+                ddgs = DDGS()
+            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+            warnings.filterwarnings("ignore", category=urllib3.exceptions.InsecureRequestWarning)
 
         # FUZZY SEARCH KEMBALI!
         # Ekstraksi PDF sangat rawan typo (spasi hilang, dsb). Exact match mutlak sering berujung 0 hasil.
@@ -1101,7 +1117,7 @@ def get_candidate_urls(sentences, max_probes=100, progress_cb=None, cutoff_year=
                         if u and u.startswith('http'):
                             found.add(u)
                 except Exception as e:
-                    logger.warning("fetch_ddgs varian gagal: {e}")
+                    logger.debug("fetch_ddgs varian gagal: %s", e)
             return list(found)
 
         # max_workers=2: hormati Cohere trial 1 req/detik + hindari DDG rate-limit
@@ -1114,9 +1130,9 @@ def get_candidate_urls(sentences, max_probes=100, progress_cb=None, cutoff_year=
                     for u in future.result():
                         urls.add(u)
                 except Exception as e:
-                    logger.warning("expander future gagal: {e}")
+                    logger.debug("expander future gagal: %s", e)
       except Exception as e:
-        logger.warning("Cohere/DDG expander error: {e}")
+        logger.debug("Cohere/DDG expander error: %s", e)
 
     # --- blok API mati di bawah dinonaktifkan (disimpan sbagai referensi histori) ---
     logger.info(f"[API] Mencari jurnal dari {len(probes)} sampel kalimat via Semantic Scholar, Crossref & DuckDuckGo...")
@@ -1148,7 +1164,7 @@ def get_candidate_urls(sentences, max_probes=100, progress_cb=None, cutoff_year=
                         urls.add(u)
                     
             except Exception as e:
-                logger.warning("Peringatan di get_candidate_urls worker: {e}")
+                logger.debug("Worker probe caught: %s", e)
             
             probes_done += 1
             # Cetak ringkasan progresif setiap 10 probe atau pada probe terakhir
@@ -1323,7 +1339,7 @@ def scrape_all_candidates(urls, preloaded_corpus, progress_cb=None):
                     failed_urls.append(futures[future])
             except Exception as e:
                 failed_urls.append(futures[future])
-                logger.warning(f"[!] Warning: API/Scraper error -> {e}")
+                logger.debug("[!] Scraper connection error -> %s", e)
             
             # Incremental save ke bank lokal setiap 50 URL sukses agar tidak hangus bila proses dibatalkan (Ctrl+C)
             # KITA HANYA SIMPAN KE LOKAL (SQLite) DISINI agar Supabase tidak kebanjiran request dan Time Out.

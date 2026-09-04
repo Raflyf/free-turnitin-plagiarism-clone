@@ -3,6 +3,8 @@ Direct scraping untuk repository kampus Indonesia tanpa batasan API.
 Strategi: Akses langsung ke portal OJS (Open Journal Systems) yang digunakan mayoritas kampus.
 """
 import requests
+import warnings
+import urllib3
 import re
 import urllib.parse
 from bs4 import BeautifulSoup
@@ -10,6 +12,15 @@ from concurrent.futures import ThreadPoolExecutor
 import time
 import httpx
 import os
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+warnings.filterwarnings("ignore", category=urllib3.exceptions.InsecureRequestWarning)
+try:
+    import requests.packages.urllib3.exceptions
+    requests.packages.urllib3.disable_warnings(requests.packages.urllib3.exceptions.InsecureRequestWarning)
+    warnings.filterwarnings("ignore", category=requests.packages.urllib3.exceptions.InsecureRequestWarning)
+except Exception:
+    pass
 
 import threading
 
